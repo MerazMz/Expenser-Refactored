@@ -227,8 +227,14 @@ export default function LoginPage() {
           <button
             onClick={() => {
               if (isForgot) {
-                setIsForgot(false);
-                setForgotStep("email");
+                if (forgotStep === "otp") {
+                  setForgotStep("email");
+                } else if (forgotStep === "reset") {
+                  setForgotStep("otp");
+                } else {
+                  setIsForgot(false);
+                  setForgotStep("email");
+                }
               } else {
                 setIsSignup(false);
               }
@@ -243,8 +249,8 @@ export default function LoginPage() {
 
       {/* Hero Header Section */}
       <div className={cn(
-        "flex flex-col items-center text-center px-6 pt-5 pb-4 transition-all duration-300 z-0",
-        (isSignup || isForgot) ? "mt-1 space-y-1.5" : "space-y-3"
+        "flex flex-col items-center text-center px-6 pt-5 pb-2 transition-all duration-300 z-0",
+        (isSignup || isForgot) ? "space-y-2" : "space-y-3"
       )}>
         {/* Logo Branding */}
         <div className="flex items-center space-x-2">
@@ -267,9 +273,6 @@ export default function LoginPage() {
               <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200 tracking-tight leading-none">
                 Track - Save - Achieve
               </p>
-              {/* <p className="text-[11px] font-bold text-[#1a4a34] dark:text-emerald-400 leading-normal">
-                Take control of your money.
-              </p> */}
             </div>
 
             {/* Login Illustration Image */}
@@ -285,21 +288,28 @@ export default function LoginPage() {
             </div>
           </>
         ) : (
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">
+          <div className="space-y-1 pt-1 pb-1">
+            <h2 className="text-xl font-extrabold text-zinc-900 dark:text-zinc-100 leading-tight">
               {isForgot ? "Reset Password" : "Create your account"}
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-normal">
               {isForgot
-                ? "Request code to update password"
+                ? (forgotStep === "otp"
+                    ? `Code sent to ${email || "your email"}`
+                    : forgotStep === "reset"
+                    ? "Enter your new password"
+                    : "Request code to update password")
                 : "Start your journey to better financial habits"}
             </p>
           </div>
         )}
       </div>
 
-      {/* Form Card Container - overlap bottom of illustration */}
-      <div className="relative z-10 -mt-8 flex-1 bg-white/80 dark:bg-zinc-900/60 border-t border-zinc-200/80 dark:border-zinc-800/60 rounded-t-[2.25rem] px-6 py-6 shadow-[0_-8px_20px_rgba(0,0,0,0.02)] overflow-y-auto">
+      {/* Form Card Container - overlap bottom of illustration on login, but clean spacing on forgot/signup */}
+      <div className={cn(
+        "relative z-10 flex-1 bg-white/80 dark:bg-zinc-900/60 border-t border-zinc-200/80 dark:border-zinc-800/60 rounded-t-[2.25rem] px-6 py-6 shadow-[0_-8px_20px_rgba(0,0,0,0.02)] overflow-y-auto",
+        (isSignup || isForgot) ? "mt-2" : "-mt-8"
+      )}>
         <AnimatePresence mode="wait">
           {isForgot ? (
             <motion.div

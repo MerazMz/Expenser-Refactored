@@ -55,6 +55,8 @@ export default function SettingsPage() {
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedExportMonth, setSelectedExportMonth] = useState("");
   const [resetConfirmText, setResetConfirmText] = useState("");
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -164,14 +166,19 @@ export default function SettingsPage() {
     }
   };
 
-  const handleLogout = async () => {
-    if (!window.confirm("Are you sure you want to log out?")) {
-      return;
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      await refreshSession();
+      toast.success("Logged out");
+      router.push("/login");
+    } catch {
+      toast.error("Failed to log out");
+    } finally {
+      setIsLoggingOut(false);
+      setIsLogoutDialogOpen(false);
     }
-    await logout();
-    await refreshSession();
-    toast.success("Logged out");
-    router.push("/login");
   };
 
   if (authLoading || !settings) {
@@ -250,7 +257,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <button onClick={handleLogout} className="p-1.5 text-zinc-400 hover:text-rose-500 transition-colors cursor-pointer" title="Logout">
+        <button onClick={() => setIsLogoutDialogOpen(true)} className="p-1.5 text-zinc-400 hover:text-rose-500 transition-colors cursor-pointer" title="Logout">
           <LogOut className="h-4 w-4" />
         </button>
       </div>
@@ -513,6 +520,35 @@ export default function SettingsPage() {
               className="h-10 flex-1 rounded-xl bg-[#1b4332] hover:bg-[#153427] text-white font-bold text-xs cursor-pointer"
             >
               {isExporting ? <Loader2 className="animate-spin text-white" /> : "Export Sheet"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Logout Confirmation Dialog */}
+      <Dialog open={isLogoutDialogOpen} onOpenChange={setIsLogoutDialogOpen}>
+        <DialogContent className="rounded-2xl bg-white dark:bg-zinc-900 p-6 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-zinc-900 dark:text-zinc-100">Log Out</DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400">
+              Are you sure you want to log out of your account?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsLogoutDialogOpen(false)}
+              className="h-10 flex-1 rounded-xl text-xs font-bold border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <Button
+              onClick={handleConfirmLogout}
+              disabled={isLoggingOut}
+              className="h-10 flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer shadow-xs transition-colors"
+            >
+              {isLoggingOut ? <Loader2 className="animate-spin text-white h-4 w-4" /> : "Log Out"}
             </Button>
           </div>
         </DialogContent>
