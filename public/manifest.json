@@ -1,0 +1,24 @@
+{
+  "name": "Expenser",
+  "short_name": "Expenser",
+  "description": "Premium expense tracker and daily budget manager.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f7f5f0",
+  "theme_color": "#1d3f32",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

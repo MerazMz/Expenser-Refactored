@@ -42,6 +42,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     fetchSession();
+
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").then(
+          (reg) => console.log("SW registered successfully:", reg.scope),
+          (err) => console.log("SW registration failed:", err)
+        );
+      });
+    }
   }, []);
 
   return (
