@@ -1,0 +1,62 @@
+// Prisma Schema for Expenser (PostgreSQL)
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String?
+  displayName     String?
+  photoURL        String?
+  provider        String    @default("email")
+  resetOTP        String?
+  resetOTPExpires DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  settings        Settings?
+  expenses        Expense[]
+
+  @@map("users")
+}
+
+model Settings {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyBudget Float
+  dailyBudget   Float
+  currency      String   @default("INR")
+  currentMonth  String   // Format: YYYY-MM
+  theme         String   @default("dark")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model Expense {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      String   // Format: YYYY-MM-DD
+  limit     Float
+  spent     Float    @default(0)
+  saved     Float    @default(0)
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@index([userId])
+  @@map("expenses")
+}
