@@ -187,19 +187,25 @@ export const LoginScreen: React.FC = () => {
 
       const authUrl = `${API_BASE_URL}/auth/mobile-google?redirect_uri=${encodeURIComponent(redirectUri)}`;
 
-      let sessionResult: WebBrowser.WebBrowserAuthSessionResult | null = null;
+      let sessionCompleted = false;
       try {
-        sessionResult = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+        const sessionResult = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+        if (sessionResult && sessionResult.type === "success" && sessionResult.url) {
+          await processGoogleAuthCallback(sessionResult.url);
+          sessionCompleted = true;
+          return;
+        } else if (sessionResult && sessionResult.type === "dismiss") {
+          sessionCompleted = true;
+        }
       } catch (browserErr) {
-        console.warn("WebBrowser error, falling back to Linking.openURL:", browserErr);
+        console.warn("WebBrowser.openAuthSessionAsync failed, trying fallback:", browserErr);
       }
 
-      if (sessionResult && sessionResult.type === "success" && sessionResult.url) {
-        await processGoogleAuthCallback(sessionResult.url);
-      } else if (!sessionResult || sessionResult.type !== "cancel") {
-        // Fallback: Open device default browser
-        const canOpen = await Linking.canOpenURL(authUrl);
-        if (canOpen) {
+      if (!sessionCompleted) {
+        try {
+          await WebBrowser.openBrowserAsync(authUrl);
+        } catch {
+          // Direct Linking without canOpenURL check (works on Android 11+)
           await Linking.openURL(authUrl);
         }
       }
