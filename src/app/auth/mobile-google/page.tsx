@@ -119,14 +119,25 @@ function MobileGoogleAuthContent() {
         )}
 
         {status === "redirecting" && appRedirectUrl && (
-          <div className="mb-4">
-            <p className="text-xs text-zinc-400 mb-3">If you are not redirected automatically:</p>
-            <a
-              href={appRedirectUrl}
-              className="inline-block py-2.5 px-6 rounded-xl bg-[#10b981] text-white font-bold text-xs shadow-md"
-            >
-              Open Expenser App
-            </a>
+          <div className="space-y-3 my-2">
+            <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 text-xs">
+              ✓ Successfully authenticated with Google!
+            </div>
+            <p className="text-xs text-zinc-400">Tap below if not returned automatically:</p>
+            <div className="flex flex-col gap-2">
+              <a
+                href={appRedirectUrl}
+                className="w-full py-3 px-4 rounded-xl bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs shadow-md block text-center"
+              >
+                Return to Expenser App
+              </a>
+              <a
+                href={appRedirectUrl.replace(/^[^:]+:\/\//, "com.merazmz.expenser://")}
+                className="w-full py-2 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs block text-center"
+              >
+                Alternative App Link
+              </a>
+            </div>
           </div>
         )}
 

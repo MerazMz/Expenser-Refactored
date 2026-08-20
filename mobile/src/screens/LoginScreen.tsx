@@ -180,10 +180,7 @@ export const LoginScreen: React.FC = () => {
     clearErrors();
     setIsGoogleLoading(true);
     try {
-      const redirectUri = AuthSession.makeRedirectUri({
-        scheme: "expenser",
-        path: "auth-callback",
-      });
+      const redirectUri = AuthSession.makeRedirectUri();
 
       const authUrl = `${API_BASE_URL}/auth/mobile-google?redirect_uri=${encodeURIComponent(redirectUri)}`;
 
