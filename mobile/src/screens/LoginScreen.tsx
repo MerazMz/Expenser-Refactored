@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Dimensions,
   KeyboardAvoidingView,
+  Linking,
 } from "react-native";
 import Svg, { Path, Defs, RadialGradient, Stop } from "react-native-svg";
 import { Mail, Lock, User, Eye, EyeOff, ChevronLeft, AlertCircle } from "lucide-react-native";
@@ -54,12 +55,74 @@ export const LoginScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const parseGoogleAuthUrl = (urlStr: string) => {
+    try {
+      const queryPart = urlStr.includes("?")
+        ? urlStr.split("?")[1]
+        : urlStr.includes("#")
+        ? urlStr.split("#")[1]
+        : "";
+      const params: { [k: string]: string } = {};
+      if (queryPart) {
+        queryPart.split("&").forEach((pair) => {
+          const [k, v] = pair.split("=");
+          if (k && v) params[decodeURIComponent(k)] = decodeURIComponent(v);
+        });
+      }
+      return {
+        email: params.email,
+        displayName: params.displayName,
+        photoURL: params.photoURL,
+      };
+    } catch {
+      return {};
+    }
+  };
+
+  const processGoogleAuthCallback = async (urlStr: string) => {
+    const { email: googleEmail, displayName: googleDisplayName, photoURL: googlePhotoURL } =
+      parseGoogleAuthUrl(urlStr);
+
+    if (googleEmail) {
+      setIsGoogleLoading(true);
+      try {
+        const res = await loginWithGoogle(googleEmail, googleDisplayName, googlePhotoURL);
+        if (!res.success) {
+          setErrorMessage(res.error || "Unable to sign in with Google.");
+        }
+      } catch (e: any) {
+        setErrorMessage(e.message || "Failed to complete Google login.");
+      } finally {
+        setIsGoogleLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (rememberedEmail) {
       setEmail(rememberedEmail);
     }
+
+    // Listen for deep link redirect callbacks
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (url && (url.includes("auth-callback") || url.includes("email="))) {
+        processGoogleAuthCallback(url);
+      }
+    });
+
+    // Check if app was opened with deep link
+    Linking.getInitialURL().then((initialUrl) => {
+      if (initialUrl && (initialUrl.includes("auth-callback") || initialUrl.includes("email="))) {
+        processGoogleAuthCallback(initialUrl);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [rememberedEmail]);
 
   const clearErrors = () => {
@@ -115,7 +178,7 @@ export const LoginScreen: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     clearErrors();
-    setIsLoading(true);
+    setIsGoogleLoading(true);
     try {
       const redirectUri = AuthSession.makeRedirectUri({
         scheme: "expenser",
@@ -124,30 +187,27 @@ export const LoginScreen: React.FC = () => {
 
       const authUrl = `${API_BASE_URL}/auth/mobile-google?redirect_uri=${encodeURIComponent(redirectUri)}`;
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      let sessionResult: WebBrowser.WebBrowserAuthSessionResult | null = null;
+      try {
+        sessionResult = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      } catch (browserErr) {
+        console.warn("WebBrowser error, falling back to Linking.openURL:", browserErr);
+      }
 
-      if (result.type === "success" && result.url) {
-        // Extract query parameters from return callback URL
-        const parsedUrl = new URL(result.url);
-        const googleEmail = parsedUrl.searchParams.get("email");
-        const googleDisplayName = parsedUrl.searchParams.get("displayName") || undefined;
-        const googlePhotoURL = parsedUrl.searchParams.get("photoURL") || undefined;
-
-        if (!googleEmail) {
-          setErrorMessage("Google sign-in did not return an email.");
-          return;
-        }
-
-        const res = await loginWithGoogle(googleEmail, googleDisplayName, googlePhotoURL);
-        if (!res.success) {
-          setErrorMessage(res.error || "Unable to sign in with Google.");
+      if (sessionResult && sessionResult.type === "success" && sessionResult.url) {
+        await processGoogleAuthCallback(sessionResult.url);
+      } else if (!sessionResult || sessionResult.type !== "cancel") {
+        // Fallback: Open device default browser
+        const canOpen = await Linking.canOpenURL(authUrl);
+        if (canOpen) {
+          await Linking.openURL(authUrl);
         }
       }
     } catch (err: any) {
       console.error("Google sign in error:", err);
-      setErrorMessage(err.message || "Failed to sign in with Google.");
+      setErrorMessage(err.message || "Failed to initiate Google sign in.");
     } finally {
-      setIsLoading(false);
+      setIsGoogleLoading(false);
     }
   };
 
@@ -641,29 +701,35 @@ export const LoginScreen: React.FC = () => {
               {/* Google Button */}
               <TouchableOpacity
                 onPress={handleGoogleLogin}
-                disabled={isLoading}
+                disabled={isLoading || isGoogleLoading}
                 activeOpacity={0.8}
                 style={styles.googleButton}
               >
-                <Svg width={18} height={18} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
-                  <Path
-                    d="M21.35 11.1H12v2.7h5.38c-.24 1.28-.96 2.37-2.04 3.1v2.58h3.3c1.93-1.78 3.04-4.4 3.04-7.48 0-.6-.05-1.18-.33-1.9z"
-                    fill="#4285F4"
-                  />
-                  <Path
-                    d="M12 20.82c2.47 0 4.54-.82 6.06-2.22l-3.3-2.58c-.92.62-2.1.98-3.5.98-2.69 0-4.96-1.82-5.77-4.27H2.07v2.66C3.59 17.7 7.55 20.82 12 20.82z"
-                    fill="#34A853"
-                  />
-                  <Path
-                    d="M6.23 12.73c-.21-.62-.33-1.28-.33-1.97s.12-1.35 0.33-1.97V6.13H2.07c-.74 1.48-1.17 3.14-1.17 4.9s.43 3.42 1.17 4.9l4.16-3.2z"
-                    fill="#FBBC05"
-                  />
-                  <Path
-                    d="M12 5.17c1.34 0 2.55.46 3.5 1.36l2.62-2.62C16.53 2.44 14.46 1.52 12 1.52 7.55 1.52 3.59 4.64 2.07 7.96l4.16 3.24C7.04 6.95 9.31 5.17 12 5.17z"
-                    fill="#EA4335"
-                  />
-                </Svg>
-                <Text style={styles.googleButtonText}>Google</Text>
+                {isGoogleLoading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Svg width={18} height={18} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
+                      <Path
+                        d="M21.35 11.1H12v2.7h5.38c-.24 1.28-.96 2.37-2.04 3.1v2.58h3.3c1.93-1.78 3.04-4.4 3.04-7.48 0-.6-.05-1.18-.33-1.9z"
+                        fill="#4285F4"
+                      />
+                      <Path
+                        d="M12 20.82c2.47 0 4.54-.82 6.06-2.22l-3.3-2.58c-.92.62-2.1.98-3.5.98-2.69 0-4.96-1.82-5.77-4.27H2.07v2.66C3.59 17.7 7.55 20.82 12 20.82z"
+                        fill="#34A853"
+                      />
+                      <Path
+                        d="M6.23 12.73c-.21-.62-.33-1.28-.33-1.97s.12-1.35 0.33-1.97V6.13H2.07c-.74 1.48-1.17 3.14-1.17 4.9s.43 3.42 1.17 4.9l4.16-3.2z"
+                        fill="#FBBC05"
+                      />
+                      <Path
+                        d="M12 5.17c1.34 0 2.55.46 3.5 1.36l2.62-2.62C16.53 2.44 14.46 1.52 12 1.52 7.55 1.52 3.59 4.64 2.07 7.96l4.16 3.24C7.04 6.95 9.31 5.17 12 5.17z"
+                        fill="#EA4335"
+                      />
+                    </Svg>
+                    <Text style={styles.googleButtonText}>Google</Text>
+                  </>
+                )}
               </TouchableOpacity>
 
               {/* Switch Auth Link */}
@@ -778,29 +844,35 @@ export const LoginScreen: React.FC = () => {
               {/* Google Button */}
               <TouchableOpacity
                 onPress={handleGoogleLogin}
-                disabled={isLoading}
+                disabled={isLoading || isGoogleLoading}
                 activeOpacity={0.8}
                 style={styles.googleButton}
               >
-                <Svg width={18} height={18} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
-                  <Path
-                    d="M21.35 11.1H12v2.7h5.38c-.24 1.28-.96 2.37-2.04 3.1v2.58h3.3c1.93-1.78 3.04-4.4 3.04-7.48 0-.6-.05-1.18-.33-1.9z"
-                    fill="#4285F4"
-                  />
-                  <Path
-                    d="M12 20.82c2.47 0 4.54-.82 6.06-2.22l-3.3-2.58c-.92.62-2.1.98-3.5.98-2.69 0-4.96-1.82-5.77-4.27H2.07v2.66C3.59 17.7 7.55 20.82 12 20.82z"
-                    fill="#34A853"
-                  />
-                  <Path
-                    d="M6.23 12.73c-.21-.62-.33-1.28-.33-1.97s.12-1.35 0.33-1.97V6.13H2.07c-.74 1.48-1.17 3.14-1.17 4.9s.43 3.42 1.17 4.9l4.16-3.2z"
-                    fill="#FBBC05"
-                  />
-                  <Path
-                    d="M12 5.17c1.34 0 2.55.46 3.5 1.36l2.62-2.62C16.53 2.44 14.46 1.52 12 1.52 7.55 1.52 3.59 4.64 2.07 7.96l4.16 3.24C7.04 6.95 9.31 5.17 12 5.17z"
-                    fill="#EA4335"
-                  />
-                </Svg>
-                <Text style={styles.googleButtonText}>Google</Text>
+                {isGoogleLoading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Svg width={18} height={18} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
+                      <Path
+                        d="M21.35 11.1H12v2.7h5.38c-.24 1.28-.96 2.37-2.04 3.1v2.58h3.3c1.93-1.78 3.04-4.4 3.04-7.48 0-.6-.05-1.18-.33-1.9z"
+                        fill="#4285F4"
+                      />
+                      <Path
+                        d="M12 20.82c2.47 0 4.54-.82 6.06-2.22l-3.3-2.58c-.92.62-2.1.98-3.5.98-2.69 0-4.96-1.82-5.77-4.27H2.07v2.66C3.59 17.7 7.55 20.82 12 20.82z"
+                        fill="#34A853"
+                      />
+                      <Path
+                        d="M6.23 12.73c-.21-.62-.33-1.28-.33-1.97s.12-1.35 0.33-1.97V6.13H2.07c-.74 1.48-1.17 3.14-1.17 4.9s.43 3.42 1.17 4.9l4.16-3.2z"
+                        fill="#FBBC05"
+                      />
+                      <Path
+                        d="M12 5.17c1.34 0 2.55.46 3.5 1.36l2.62-2.62C16.53 2.44 14.46 1.52 12 1.52 7.55 1.52 3.59 4.64 2.07 7.96l4.16 3.24C7.04 6.95 9.31 5.17 12 5.17z"
+                        fill="#EA4335"
+                      />
+                    </Svg>
+                    <Text style={styles.googleButtonText}>Google</Text>
+                  </>
+                )}
               </TouchableOpacity>
 
               {/* Bottom Switch Link */}
