@@ -37,6 +37,9 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -129,6 +132,14 @@ export default function LoginPage() {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newPassword || newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await resetPasswordWithOTP({ email, otp, newPassword });
@@ -140,6 +151,7 @@ export default function LoginPage() {
         setForgotStep("email");
         setPassword("");
         setNewPassword("");
+        setConfirmNewPassword("");
       }
     } catch {
       toast.error("Failed to reset password");
@@ -380,20 +392,53 @@ export default function LoginPage() {
 
               {forgotStep === "reset" && (
                 <form onSubmit={handleResetPassword} className="space-y-4">
+                  {/* New Password */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
                       New Password
                     </label>
-                    <div className="relative flex items-center bg-[#f7f5f0]/80 dark:bg-zinc-950/80 border border-zinc-200/80 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 shadow-2xs focus-within:ring-2 focus-within:ring-emerald-600/10 focus-within:border-emerald-600 transition-all">
+                    <div className="relative flex items-center bg-[#f7f5f0]/80 dark:bg-zinc-950/80 border border-zinc-200/80 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 shadow-2xs focus-within:ring-2 focus-within:ring-[#1d3f32]/25 focus-within:border-[#1d3f32] transition-all">
                       <Lock className="h-4 w-4 text-zinc-400 mr-2.5 shrink-0" />
                       <input
-                        type="password"
+                        type={showNewPassword ? "text" : "password"}
                         placeholder="At least 8 characters"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         className="w-full bg-transparent text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-600 font-semibold"
                         required
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 shrink-0 cursor-pointer ml-1"
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      Confirm New Password
+                    </label>
+                    <div className="relative flex items-center bg-[#f7f5f0]/80 dark:bg-zinc-950/80 border border-zinc-200/80 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 shadow-2xs focus-within:ring-2 focus-within:ring-[#1d3f32]/25 focus-within:border-[#1d3f32] transition-all">
+                      <Lock className="h-4 w-4 text-zinc-400 mr-2.5 shrink-0" />
+                      <input
+                        type={showConfirmNewPassword ? "text" : "password"}
+                        placeholder="Re-enter your new password"
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        className="w-full bg-transparent text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-600 font-semibold"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
+                        className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 shrink-0 cursor-pointer ml-1"
+                      >
+                        {showConfirmNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
                   </div>
 

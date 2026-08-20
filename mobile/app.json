@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Expenser",
+    "slug": "expenser-mobile",
+    "scheme": "expenser",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#f7f5f0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4d79b95e-d765-4228-b7c7-6524cb639eb1"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.merazmz.expenser"
+    },
+    "android": {
+      "package": "com.merazmz.expenser",
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#f7f5f0",
+        "foregroundImage": "./assets/icon.png",
+        "backgroundImage": "./assets/icon.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-font",
+      "expo-updates",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#10b981",
+          "defaultChannel": "daily-reminder"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "4d79b95e-d765-4228-b7c7-6524cb639eb1"
+      }
+    }
+  }
+}

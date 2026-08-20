@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Calculate streak
+    // Calculate streak matching web logic
     const todayStr = format(new Date(), "yyyy-MM-dd");
     let streak = 0;
     const sortedDesc = [...expenses].sort((a, b) => (a.date > b.date ? -1 : 1));
@@ -143,15 +143,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "SAVE_EXPENSE") {
-      const { userId, date, spent, note } = payload;
+      const { userId, date, spent, note, limit } = payload;
       const settings = await prisma.settings.findUnique({ where: { userId } });
-      const dailyLimit = settings?.dailyBudget || 500;
-      const saved = dailyLimit - spent;
+      const dailyLimit = limit !== undefined ? Number(limit) : settings?.dailyBudget || 500;
+      const numSpent = Number(spent) || 0;
+      const saved = dailyLimit - numSpent;
 
       const expense = await prisma.expense.upsert({
         where: { userId_date: { userId, date } },
-        update: { spent, saved, note: note || "", limit: dailyLimit },
-        create: { userId, date, spent, saved, note: note || "", limit: dailyLimit },
+        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit },
+        create: { userId, date, spent: numSpent, saved, note: note || "", limit: dailyLimit },
       });
 
       return NextResponse.json({ success: true, expense }, { headers: corsHeaders });
@@ -159,25 +160,92 @@ export async function POST(req: NextRequest) {
 
     if (action === "SAVE_SETTINGS") {
       const { userId, monthlyBudget, dailyBudget, currency, theme } = payload;
-      const currentMonth = new Date().toISOString().slice(0, 7);
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const numMonthly = Number(monthlyBudget);
+      const numDaily = Number(dailyBudget);
 
       const settings = await prisma.settings.upsert({
         where: { userId },
-        update: { monthlyBudget, dailyBudget, currency, theme, currentMonth },
-        create: { userId, monthlyBudget, dailyBudget, currency, theme, currentMonth },
+        update: {
+          monthlyBudget: numMonthly,
+          dailyBudget: numDaily,
+          currency: currency || "INR",
+          theme: theme || "dark",
+          currentMonth,
+        },
+        create: {
+          userId,
+          monthlyBudget: numMonthly,
+          dailyBudget: numDaily,
+          currency: currency || "INR",
+          theme: theme || "dark",
+          currentMonth,
+        },
       });
+
+      // Generate or update month daily entries
+      const [year, month] = currentMonth.split("-").map(Number);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const upsertPromises = [];
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        upsertPromises.push(
+          prisma.expense.upsert({
+            where: { userId_date: { userId, date } },
+            create: {
+              userId,
+              date,
+              limit: numDaily,
+              spent: 0,
+              saved: numDaily,
+              note: "",
+            },
+            update: {
+              limit: numDaily,
+            },
+          })
+        );
+      }
+
+      await prisma.$transaction(upsertPromises);
 
       return NextResponse.json({ success: true, settings }, { headers: corsHeaders });
     }
 
     if (action === "RESET_MONTH") {
       const { userId, monthStr } = payload;
-      await prisma.expense.deleteMany({
-        where: {
+      const settings = await prisma.settings.findUnique({ where: { userId } });
+      const dailyBudget = settings?.dailyBudget || 500;
+
+      const [year, month] = monthStr.split("-").map(Number);
+      const daysInMonth = new Date(year, month, 0).getDate();
+
+      const entries = [];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        entries.push({
           userId,
-          date: { startsWith: monthStr },
-        },
-      });
+          date,
+          limit: dailyBudget,
+          spent: 0,
+          saved: dailyBudget,
+          note: "",
+        });
+      }
+
+      await prisma.$transaction([
+        prisma.expense.deleteMany({
+          where: {
+            userId,
+            date: { startsWith: monthStr },
+          },
+        }),
+        prisma.expense.createMany({
+          data: entries,
+        }),
+      ]);
 
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }

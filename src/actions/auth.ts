@@ -4,6 +4,7 @@ import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
+import { getOtpEmailHtml } from "@/lib/emailTemplate";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-123-change-this-in-prod";
 const ALLOWED_DOMAINS = ["@gmail.com", "@lpu.in", "@yahoo.com", "@outlook.com"];
@@ -202,14 +203,7 @@ export async function requestOTP(email: string) {
         },
         to: [{ email: user.email }],
         subject: "Password Reset OTP - Expenser",
-        htmlContent: `
-          <div style="font-family: sans-serif; padding: 20px; background: #000; color: #fff; border-radius: 20px; text-align: center;">
-            <h1 style="color: #f7f5f0; font-style: italic;">EXPENSER</h1>
-            <p>Your password reset code is:</p>
-            <h2 style="font-size: 32px; letter-spacing: 5px; color: #f7f5f0;">${otp}</h2>
-            <p style="color: #666; font-size: 12px;">This code expires in 10 minutes.</p>
-          </div>
-        `,
+        htmlContent: getOtpEmailHtml(otp),
       }),
     });
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { getOtpEmailHtml } from "@/lib/emailTemplate";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-123-change-this-in-prod";
 const ALLOWED_DOMAINS = ["@gmail.com", "@lpu.in", "@yahoo.com", "@outlook.com"];
@@ -66,6 +67,73 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: true,
+          user: {
+            uid: user.id,
+            email: user.email,
+            displayName: user.displayName || cleanEmail.split("@")[0],
+            photoURL: user.photoURL,
+            hasSettings: !!user.settings,
+          },
+          token,
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    // --- GOOGLE LOGIN ---
+    if (action === "GOOGLE_LOGIN") {
+      const { email, displayName, photoURL } = payload;
+      if (!email) {
+        return NextResponse.json(
+          { error: "Email is required" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const cleanEmail = email.toLowerCase().trim();
+      const isAllowed = ALLOWED_DOMAINS.some((domain) => cleanEmail.endsWith(domain));
+      if (!isAllowed) {
+        return NextResponse.json(
+          { error: `Google login allowed only for: ${ALLOWED_DOMAINS.join(", ")}` },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      let isNewUser = false;
+      let user = await prisma.user.findUnique({
+        where: { email: cleanEmail },
+        include: { settings: true },
+      });
+
+      if (!user) {
+        isNewUser = true;
+        user = await prisma.user.create({
+          data: {
+            email: cleanEmail,
+            displayName: displayName || cleanEmail.split("@")[0],
+            photoURL: photoURL || null,
+            provider: "google",
+          },
+          include: { settings: true },
+        });
+      } else {
+        if (!user.photoURL && photoURL) {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { photoURL },
+            include: { settings: true },
+          });
+        }
+      }
+
+      const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, {
+        expiresIn: "90d",
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          isNewUser,
           user: {
             uid: user.id,
             email: user.email,
@@ -179,7 +247,7 @@ export async function POST(req: NextRequest) {
               },
               to: [{ email: user.email }],
               subject: "Password Reset OTP - Expenser",
-              htmlContent: `<p>Your password reset code is: <b>${otp}</b> (valid for 10 minutes).</p>`,
+              htmlContent: getOtpEmailHtml(otp),
             }),
           });
         } catch (e) {

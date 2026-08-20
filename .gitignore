@@ -20,9 +20,6 @@
 # production
 /build
 
-#android
-/mobile
-
 # misc
 .DS_Store
 *.pem
