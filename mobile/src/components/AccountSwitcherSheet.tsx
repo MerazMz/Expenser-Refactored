@@ -8,13 +8,11 @@ import {
   ScrollView,
   Dimensions,
   Platform,
-  Alert,
 } from "react-native";
 import {
   Check,
   Plus,
-  Edit2,
-  Trash2,
+  Settings2,
   X,
   Wallet,
   Sparkles,
@@ -46,37 +44,11 @@ export const AccountSwitcherSheet: React.FC = () => {
     isSwitcherOpen,
     closeSwitcher,
     switchAccount,
-    deleteAccount,
     openCreateModal,
     openEditModal,
   } = useAccount();
-  const { colors, isDark } = useAppTheme();
+  const { isDark } = useAppTheme();
   const { user } = useAuth();
-
-  const handleDeleteAccount = (acc: Account) => {
-    if (accounts.length <= 1) {
-      Alert.alert("Cannot Delete", "You must have at least one active account.");
-      return;
-    }
-    Alert.alert(
-      "Delete Account",
-      `Are you sure you want to delete "${acc.name}"? All associated expense records will be deleted.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteAccount(acc.id);
-            } catch (err: any) {
-              Alert.alert("Error", err.message || "Failed to delete account.");
-            }
-          },
-        },
-      ]
-    );
-  };
 
   if (!isSwitcherOpen) return null;
 
@@ -115,15 +87,15 @@ export const AccountSwitcherSheet: React.FC = () => {
                   { color: isDark ? "#f4f4f5" : "#18181b" },
                 ]}
               >
-                My Accounts & Ledgers
+                Accounts & Ledgers
               </Text>
               <Text
                 style={[
                   styles.headerSubtitle,
-                  { color: isDark ? "#a1a1aa" : "#71717a" },
+                  { color: isDark ? "#71717a" : "#a1a1aa" },
                 ]}
               >
-                Switch or manage your expense ledgers
+                Select active expense tracker
               </Text>
             </View>
 
@@ -134,7 +106,7 @@ export const AccountSwitcherSheet: React.FC = () => {
                 { backgroundColor: isDark ? "rgba(39, 39, 42, 0.6)" : "#f4f4f5" },
               ]}
             >
-              <X size={16} color={isDark ? "#a1a1aa" : "#71717a"} />
+              <X size={15} color={isDark ? "#a1a1aa" : "#71717a"} />
             </TouchableOpacity>
           </View>
 
@@ -148,26 +120,27 @@ export const AccountSwitcherSheet: React.FC = () => {
               const isActive = activeAccount?.id === acc.id;
               const IconComp = ICON_MAP[acc.icon] || Wallet;
               const isFlex = acc.type === "flex";
+              const accColor = acc.color || (isFlex ? "#3b82f6" : "#10b981");
 
               return (
                 <TouchableOpacity
                   key={acc.id}
-                  activeOpacity={0.75}
+                  activeOpacity={0.8}
                   onPress={() => switchAccount(acc.id)}
                   style={[
                     styles.accountCard,
                     {
                       backgroundColor: isActive
                         ? isDark
-                          ? "rgba(16, 185, 129, 0.08)"
-                          : "rgba(16, 185, 129, 0.06)"
+                          ? "rgba(16, 185, 129, 0.07)"
+                          : "rgba(16, 185, 129, 0.05)"
                         : isDark
-                        ? "#181a20"
-                        : "#f9fafb",
+                        ? "#191b22"
+                        : "#fafafa",
                       borderColor: isActive
                         ? "#10b981"
                         : isDark
-                        ? "#27272a"
+                        ? "#232630"
                         : "#e5e7eb",
                     },
                   ]}
@@ -176,78 +149,44 @@ export const AccountSwitcherSheet: React.FC = () => {
                   <View
                     style={[
                       styles.iconWrapper,
-                      { backgroundColor: acc.color ? `${acc.color}25` : "rgba(16, 185, 129, 0.2)" },
+                      { backgroundColor: `${accColor}20` },
                     ]}
                   >
-                    <IconComp size={18} color={acc.color || "#10b981"} />
+                    <IconComp size={18} color={accColor} strokeWidth={2.2} />
                   </View>
 
                   {/* Center Info */}
                   <View style={styles.accountInfo}>
-                    <View style={styles.nameRow}>
-                      <Text
-                        style={[
-                          styles.accountName,
-                          { color: isDark ? "#ffffff" : "#111827" },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {acc.name}
-                      </Text>
-                      {isActive && (
-                        <View style={styles.activeTag}>
-                          <Text style={styles.activeTagText}>ACTIVE</Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text
+                      style={[
+                        styles.accountName,
+                        { color: isDark ? "#ffffff" : "#111827" },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {acc.name}
+                    </Text>
 
-                    <View style={styles.badgeRow}>
-                      <View
-                        style={[
-                          styles.modePill,
-                          {
-                            backgroundColor: isFlex
-                              ? "rgba(59, 130, 246, 0.15)"
-                              : "rgba(16, 185, 129, 0.15)",
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.modePillText,
-                            { color: isFlex ? "#60a5fa" : "#34d399" },
-                          ]}
-                        >
-                          {isFlex ? "Track As You Go" : `Fixed Budget: ₹${acc.dailyBudget}/day`}
-                        </Text>
-                      </View>
-
-                      <Text
-                        style={[
-                          styles.balanceText,
-                          { color: isDark ? "#a1a1aa" : "#6b7280" },
-                        ]}
-                      >
-                        {isFlex ? `Balance: ₹${acc.initialBalance.toLocaleString()}` : `Limit: ₹${acc.monthlyBudget.toLocaleString()}`}
-                      </Text>
-                    </View>
+                    <Text
+                      style={[
+                        styles.subDetailText,
+                        { color: isDark ? "#828799" : "#6b7280" },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {isFlex
+                        ? `₹${acc.initialBalance.toLocaleString()} available • Track as you go`
+                        : `₹${acc.dailyBudget}/day • ₹${acc.monthlyBudget.toLocaleString()} limit`}
+                    </Text>
                   </View>
 
                   {/* Right Actions */}
                   <View style={styles.rightActions}>
-                    {accounts.length > 1 && (
-                      <TouchableOpacity
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleDeleteAccount(acc);
-                        }}
-                        style={[
-                          styles.deleteRowBtn,
-                          { backgroundColor: isDark ? "rgba(244, 63, 94, 0.15)" : "#fee2e2" },
-                        ]}
-                      >
-                        <Trash2 size={13} color="#f43f5e" />
-                      </TouchableOpacity>
+                    {isActive && (
+                      <View style={styles.activePill}>
+                        <Check size={11} color="#10b981" strokeWidth={3} />
+                        <Text style={styles.activePillText}>Active</Text>
+                      </View>
                     )}
 
                     <TouchableOpacity
@@ -255,19 +194,18 @@ export const AccountSwitcherSheet: React.FC = () => {
                         e.stopPropagation();
                         openEditModal(acc);
                       }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       style={[
-                        styles.editButton,
-                        { backgroundColor: isDark ? "rgba(39, 39, 42, 0.6)" : "#f3f4f6" },
+                        styles.settingsButton,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(255, 255, 255, 0.06)"
+                            : "rgba(0, 0, 0, 0.04)",
+                        },
                       ]}
                     >
-                      <Edit2 size={13} color={isDark ? "#a1a1aa" : "#6b7280"} />
+                      <Settings2 size={14} color={isDark ? "#828799" : "#9ca3af"} />
                     </TouchableOpacity>
-
-                    {isActive && (
-                      <View style={styles.checkCircle}>
-                        <Check size={12} color="#ffffff" strokeWidth={3} />
-                      </View>
-                    )}
                   </View>
                 </TouchableOpacity>
               );
@@ -280,18 +218,18 @@ export const AccountSwitcherSheet: React.FC = () => {
               style={[
                 styles.addAccountButton,
                 {
-                  borderColor: isDark ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.3)",
-                  backgroundColor: isDark ? "rgba(16, 185, 129, 0.05)" : "#ecfdf5",
+                  borderColor: isDark ? "rgba(16, 185, 129, 0.35)" : "rgba(16, 185, 129, 0.3)",
+                  backgroundColor: isDark ? "rgba(16, 185, 129, 0.04)" : "#f0fdf4",
                 },
               ]}
             >
               <View style={styles.addIconCircle}>
-                <Plus size={16} color="#10b981" strokeWidth={2.5} />
+                <Plus size={15} color="#10b981" strokeWidth={2.5} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.addAccountTitle}>Add New Account</Text>
                 <Text style={styles.addAccountSubtitle}>
-                  Create food, travel, or flex expense tracker
+                  Create a custom daily budget or flex expense ledger
                 </Text>
               </View>
             </TouchableOpacity>
@@ -303,14 +241,16 @@ export const AccountSwitcherSheet: React.FC = () => {
               style={[
                 styles.userFooter,
                 {
-                  borderTopColor: isDark ? "#27272a" : "#f3f4f6",
-                  backgroundColor: isDark ? "#0d0e12" : "#f9fafb",
+                  borderTopColor: isDark ? "#232630" : "#f3f4f6",
+                  backgroundColor: isDark ? "#0e0f14" : "#fafafa",
                 },
               ]}
             >
               <View style={styles.userAvatar}>
                 <Text style={styles.userAvatarText}>
-                  {user.displayName ? user.displayName.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+                  {user.displayName
+                    ? user.displayName.charAt(0).toUpperCase()
+                    : user.email.charAt(0).toUpperCase()}
                 </Text>
               </View>
               <View style={{ flex: 1 }}>
@@ -321,7 +261,7 @@ export const AccountSwitcherSheet: React.FC = () => {
                   ]}
                   numberOfLines={1}
                 >
-                  {user.displayName || "Expenser Account"}
+                  {user.displayName || "My Account"}
                 </Text>
                 <Text
                   style={[
@@ -344,7 +284,7 @@ export const AccountSwitcherSheet: React.FC = () => {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
     justifyContent: "flex-end",
   },
   backdropTouchable: {
@@ -355,28 +295,28 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     borderWidth: 1,
     borderBottomWidth: 0,
-    maxHeight: height * 0.85,
+    maxHeight: height * 0.82,
     paddingTop: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 20,
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 24,
   },
   handleBar: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: "#3f3f46",
     alignSelf: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   headerTitle: {
     fontFamily: "Outfit_700Bold",
@@ -385,82 +325,54 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 12,
+    fontSize: 12.5,
     marginTop: 2,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
   },
   accountList: {
-    maxHeight: height * 0.55,
+    maxHeight: height * 0.52,
   },
   accountListContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingBottom: 16,
     gap: 10,
   },
   accountCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20,
-    borderWidth: 1.5,
-    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1.2,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
   iconWrapper: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
   accountInfo: {
     flex: 1,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
+    justifyContent: "center",
   },
   accountName: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 15,
-    marginRight: 6,
-  },
-  activeTag: {
-    backgroundColor: "#10b981",
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 6,
-  },
-  activeTagText: {
-    fontFamily: "Outfit_800ExtraBold",
-    fontSize: 8,
-    color: "#ffffff",
-    letterSpacing: 0.5,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  modePill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  modePillText: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 10,
+    fontSize: 15,
+    letterSpacing: -0.2,
+    marginBottom: 2,
   },
-  balanceText: {
-    fontFamily: "Outfit_500Medium",
-    fontSize: 11,
+  subDetailText: {
+    fontFamily: "Outfit_400Regular",
+    fontSize: 12,
+    letterSpacing: -0.1,
   },
   rightActions: {
     flexDirection: "row",
@@ -468,56 +380,57 @@ const styles = StyleSheet.create({
     gap: 8,
     marginLeft: 8,
   },
-  deleteRowBtn: {
+  activePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  activePillText: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 10.5,
+    color: "#10b981",
+    letterSpacing: 0.2,
+  },
+  settingsButton: {
     width: 30,
     height: 30,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  editButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#10b981",
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
   },
   addAccountButton: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20,
-    borderWidth: 1.5,
+    borderRadius: 18,
+    borderWidth: 1.2,
     borderStyle: "dashed",
-    padding: 16,
-    marginTop: 4,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    marginTop: 2,
   },
   addIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 14,
+    marginRight: 12,
   },
   addAccountTitle: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 14,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13.5,
     color: "#10b981",
   },
   addAccountSubtitle: {
     fontFamily: "Outfit_400Regular",
     fontSize: 11.5,
     color: "#71717a",
-    marginTop: 2,
+    marginTop: 1,
   },
   userFooter: {
     flexDirection: "row",
@@ -527,25 +440,26 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   userAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#10b981",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
+    marginRight: 12,
   },
   userAvatarText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 14,
+    fontSize: 15,
     color: "#ffffff",
   },
   userNameText: {
     fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
+    fontSize: 13.5,
   },
   userEmailText: {
     fontFamily: "Outfit_400Regular",
-    fontSize: 11,
+    fontSize: 11.5,
+    marginTop: 1,
   },
 });
