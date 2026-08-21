@@ -211,18 +211,11 @@ export const TodayCard: React.FC<TodayCardProps> = ({
         <View style={styles.rightColumn}>
           <View style={styles.gaugeWrapper}>
             <Svg width={size} height={size} style={{ transform: [{ rotate: "-90deg" }] }}>
-              <Defs>
-                <LinearGradient id="liquidEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <Stop offset="0%" stopColor={accentColor} />
-                  <Stop offset="100%" stopColor={isFlex ? "#3b82f6" : "#059669"} />
-                </LinearGradient>
-              </Defs>
-
               <Circle
                 cx={center}
                 cy={center}
                 r={radius}
-                stroke="rgba(39, 39, 42, 0.65)"
+                stroke={isDark ? "rgba(39, 39, 42, 0.65)" : "rgba(255, 255, 255, 0.15)"}
                 strokeWidth={strokeWidth}
                 fill="none"
               />
@@ -231,7 +224,7 @@ export const TodayCard: React.FC<TodayCardProps> = ({
                 cx={center}
                 cy={center}
                 r={radius}
-                stroke={!isFlex && isBudgetExceeded ? "#f43f5e" : "url(#liquidEmerald)"}
+                stroke={!isFlex && isBudgetExceeded ? "#f43f5e" : accentColor}
                 strokeWidth={strokeWidth}
                 strokeDasharray={circumference}
                 strokeDashoffset={animatedOffset}

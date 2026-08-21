@@ -23,11 +23,13 @@ interface SavingsLineChartProps {
     saved: number;
   }[];
   currency?: string;
+  accentColor?: string;
 }
 
 export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
   data,
   currency = "₹",
+  accentColor = "#10b981",
 }) => {
   const { colors, isDark } = useAppTheme();
 
@@ -138,18 +140,18 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
         style={[
           styles.emptyContainer,
           {
-            backgroundColor: isDark ? "#18181b" : "#ffffff",
-            borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+            backgroundColor: isDark ? "#13141a" : "#ffffff",
+            borderColor: isDark ? "#232630" : "#e5e7eb",
           },
         ]}
       >
         <Text
           style={[
             styles.emptyText,
-            { color: isDark ? "#a1a1aa" : "#71717a" },
+            { color: isDark ? "#71717a" : "#9ca3af" },
           ]}
         >
-          No data available for this month
+          No data recorded for this month
         </Text>
       </View>
     );
@@ -160,20 +162,12 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
       style={[
         styles.cardContainer,
         {
-          backgroundColor: isDark ? "#18181b" : "#ffffff",
-          borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+          backgroundColor: isDark ? "#13141a" : "#ffffff",
+          borderColor: isDark ? "#232630" : "#e5e7eb",
         },
       ]}
     >
       <Svg width={chartWidth} height={chartHeight}>
-        <Defs>
-          <LinearGradient id="chartAreaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor="#10b981" stopOpacity="0.38" />
-            <Stop offset="60%" stopColor="#10b981" stopOpacity="0.08" />
-            <Stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-          </LinearGradient>
-        </Defs>
-
         {/* Horizontal Dashed Grid Lines */}
         {gridLines.map((line, idx) => (
           <G key={idx}>
@@ -182,7 +176,7 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
               y1={line.y}
               x2={chartWidth - paddingRight}
               y2={line.y}
-              stroke={isDark ? "rgba(39, 39, 42, 0.75)" : "rgba(228, 223, 211, 0.9)"}
+              stroke={isDark ? "rgba(39, 39, 42, 0.7)" : "rgba(229, 231, 235, 0.9)"}
               strokeWidth="1"
               strokeDasharray="3 3"
             />
@@ -190,7 +184,7 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
               x={paddingLeft - 8}
               y={line.y + 4}
               textAnchor="end"
-              fill={isDark ? "#71717a" : "#a1a1aa"}
+              fill={isDark ? "#71717a" : "#9ca3af"}
               fontSize="10"
               fontFamily="Outfit_600SemiBold"
             >
@@ -206,7 +200,7 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
             x={lbl.x}
             y={chartHeight - 10}
             textAnchor="middle"
-            fill={isDark ? "#a1a1aa" : "#71717a"}
+            fill={isDark ? "#71717a" : "#9ca3af"}
             fontSize="10"
             fontFamily="Outfit_600SemiBold"
           >
@@ -214,18 +208,18 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
           </SvgText>
         ))}
 
-        {/* Area Gradient Fill */}
+        {/* Area Fill with Theme Color Tint */}
         {areaData ? (
-          <Path d={areaData} fill="url(#chartAreaGradient)" opacity={0.85} />
+          <Path d={areaData} fill={accentColor} opacity={0.12} />
         ) : null}
 
-        {/* Smooth Animated Curved Line */}
+        {/* Smooth Animated Curved Line in Solid Theme Color */}
         {pathData ? (
           <AnimatedPath
             d={pathData}
             fill="none"
-            stroke="#10b981"
-            strokeWidth="3.2"
+            stroke={accentColor}
+            strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={1400}
@@ -239,9 +233,9 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
             <Circle
               cx={maxPoint.x}
               cy={maxPoint.y}
-              r="5"
-              fill="#10b981"
-              stroke={isDark ? "#ffffff" : "#18181b"}
+              r="4.5"
+              fill={accentColor}
+              stroke={isDark ? "#13141a" : "#ffffff"}
               strokeWidth="2.5"
             />
             {/* Tooltip Pill */}
@@ -256,17 +250,17 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
                 width="54"
                 height="22"
                 rx="11"
-                fill="#1b4332"
-                stroke="rgba(34, 197, 94, 0.5)"
+                fill={isDark ? "#1c1e26" : "#ffffff"}
+                stroke={accentColor}
                 strokeWidth="1.2"
               />
               <SvgText
                 x="27"
                 y="15"
                 textAnchor="middle"
-                fill="#ffffff"
+                fill={isDark ? "#f4f4f5" : "#111827"}
                 fontSize="10.5"
-                fontFamily="Outfit_800ExtraBold"
+                fontFamily="Outfit_700Bold"
               >
                 {currency}{maxPoint.saved}
               </SvgText>

@@ -515,7 +515,11 @@ export const InsightsScreen: React.FC = () => {
           </Text>
         </View>
 
-        <SavingsLineChart data={metrics.chartData} currency={currency} />
+        <SavingsLineChart
+          data={metrics.chartData}
+          currency={currency}
+          accentColor={activeAccount?.color || (activeAccount?.type === "flex" ? "#3b82f6" : "#10b981")}
+        />
       </View>
     </ScrollView>
   );
