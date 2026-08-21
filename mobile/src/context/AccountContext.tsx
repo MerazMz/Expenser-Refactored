@@ -85,10 +85,10 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user?.uid) return;
     try {
       await setActiveAccountId(user.uid, accountId);
-      const matched = accounts.find((a) => a.id === accountId);
-      if (matched) {
-        setActiveAccount(matched);
-      }
+      const localAccs = await getLocalAccounts(user.uid);
+      setAccounts(localAccs);
+      const matched = localAccs.find((a) => a.id === accountId) || localAccs[0] || null;
+      setActiveAccount(matched);
       setIsSwitcherOpen(false);
     } catch (e) {
       console.error("Error switching account:", e);
@@ -118,8 +118,10 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isDefault: accounts.length === 0 ? 1 : 0,
     });
 
-    await refreshAccounts();
-    await switchAccount(newAcc.id);
+    await setActiveAccountId(user.uid, newAcc.id);
+    const localAccs = await getLocalAccounts(user.uid);
+    setAccounts(localAccs);
+    setActiveAccount(newAcc);
     setIsCreateModalOpen(false);
     setEditingAccount(null);
     return newAcc;
@@ -128,7 +130,8 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateAccount = async (account: Account) => {
     if (!user?.uid) throw new Error("User not authenticated");
     const updated = await saveLocalAccount(account);
-    await refreshAccounts();
+    const localAccs = await getLocalAccounts(user.uid);
+    setAccounts(localAccs);
     if (activeAccount?.id === updated.id) {
       setActiveAccount(updated);
     }
@@ -143,7 +146,15 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error("You must have at least one active account.");
     }
     await deleteLocalAccount(user.uid, accountId);
-    await refreshAccounts();
+    const localAccs = await getLocalAccounts(user.uid);
+    setAccounts(localAccs);
+    if (activeAccount?.id === accountId) {
+      const nextAcc = localAccs[0] || null;
+      if (nextAcc) {
+        await setActiveAccountId(user.uid, nextAcc.id);
+      }
+      setActiveAccount(nextAcc);
+    }
   };
 
   const openSwitcher = () => setIsSwitcherOpen(true);

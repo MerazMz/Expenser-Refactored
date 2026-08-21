@@ -155,30 +155,55 @@ export async function POST(req: NextRequest) {
 
     if (action === "CREATE_ACCOUNT") {
       const { id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault } = payload;
-      const account = await prisma.account.create({
-        data: {
-          id: id || undefined,
-          userId,
-          name: name || "My Expenses",
-          type: type || "budget",
-          initialBalance: Number(initialBalance) || 0,
-          monthlyBudget: Number(monthlyBudget) || 0,
-          dailyBudget: Number(dailyBudget) || 0,
-          currency: currency || "INR",
-          color: color || "#10b981",
-          icon: icon || "wallet",
-          isDefault: Boolean(isDefault),
-        },
-      });
+      
+      const accountData = {
+        userId,
+        name: name || "My Expenses",
+        type: type || "budget",
+        initialBalance: Number(initialBalance) || 0,
+        monthlyBudget: Number(monthlyBudget) || 0,
+        dailyBudget: Number(dailyBudget) || 0,
+        currency: currency || "INR",
+        color: color || "#10b981",
+        icon: icon || "wallet",
+        isDefault: Boolean(isDefault),
+      };
+
+      const account = id
+        ? await prisma.account.upsert({
+            where: { id },
+            update: accountData,
+            create: { id, ...accountData },
+          })
+        : await prisma.account.create({
+            data: accountData,
+          });
 
       return NextResponse.json({ success: true, account }, { headers: corsHeaders });
     }
 
     if (action === "UPDATE_ACCOUNT") {
       const { id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault } = payload;
-      const account = await prisma.account.update({
+      
+      if (!id) {
+        return NextResponse.json({ error: "Missing account id" }, { status: 400, headers: corsHeaders });
+      }
+
+      const accountData = {
+        name: name !== undefined ? name : "My Expenses",
+        type: type !== undefined ? type : "budget",
+        initialBalance: initialBalance !== undefined ? Number(initialBalance) : 0,
+        monthlyBudget: monthlyBudget !== undefined ? Number(monthlyBudget) : 0,
+        dailyBudget: dailyBudget !== undefined ? Number(dailyBudget) : 0,
+        currency: currency !== undefined ? currency : "INR",
+        color: color !== undefined ? color : "#10b981",
+        icon: icon !== undefined ? icon : "wallet",
+        isDefault: isDefault !== undefined ? Boolean(isDefault) : false,
+      };
+
+      const account = await prisma.account.upsert({
         where: { id },
-        data: {
+        update: {
           name: name !== undefined ? name : undefined,
           type: type !== undefined ? type : undefined,
           initialBalance: initialBalance !== undefined ? Number(initialBalance) : undefined,
@@ -188,6 +213,11 @@ export async function POST(req: NextRequest) {
           color: color !== undefined ? color : undefined,
           icon: icon !== undefined ? icon : undefined,
           isDefault: isDefault !== undefined ? Boolean(isDefault) : undefined,
+        },
+        create: {
+          id,
+          userId,
+          ...accountData,
         },
       });
 
@@ -209,10 +239,19 @@ export async function POST(req: NextRequest) {
       const numSpent = Number(spent) || 0;
       const saved = dailyLimit - numSpent;
 
+      // Validate accountId if supplied so foreign key does not fail
+      let validAccountId: string | undefined = undefined;
+      if (accountId) {
+        const existingAcc = await prisma.account.findUnique({ where: { id: accountId } });
+        if (existingAcc) {
+          validAccountId = accountId;
+        }
+      }
+
       const expense = await prisma.expense.upsert({
         where: { userId_date: { userId, date } },
-        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit, accountId: accountId || undefined },
-        create: { userId, accountId: accountId || undefined, date, spent: numSpent, saved, note: note || "", limit: dailyLimit },
+        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit, accountId: validAccountId },
+        create: { userId, accountId: validAccountId, date, spent: numSpent, saved, note: note || "", limit: dailyLimit },
       });
 
       return NextResponse.json({ success: true, expense }, { headers: corsHeaders });
