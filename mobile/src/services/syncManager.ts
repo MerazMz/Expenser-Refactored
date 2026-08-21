@@ -1,10 +1,10 @@
 import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   getPendingSyncQueue,
   removeSyncQueueItem,
   markExpenseSynced,
   markSettingsSynced,
+  markAccountSynced,
   bulkUpsertExpensesFromServer,
   bulkUpsertAccountsFromServer,
   upsertSettingsFromServer,
@@ -97,6 +97,10 @@ export async function processOfflineSyncQueue() {
             await markExpenseSynced(`${payload.userId}_${payload.date}`);
           } else if (item.action === "SAVE_SETTINGS") {
             await markSettingsSynced(payload.userId);
+          } else if (item.action === "CREATE_ACCOUNT" || item.action === "UPDATE_ACCOUNT") {
+            if (payload.id) {
+              await markAccountSynced(payload.id);
+            }
           }
           await removeSyncQueueItem(item.id);
         } else {

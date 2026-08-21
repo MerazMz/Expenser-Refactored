@@ -8,7 +8,7 @@ import {
   setActiveAccountId,
 } from "../db/sqlite";
 import { useAuth } from "./AuthContext";
-import { subscribeSyncUpdates, processOfflineSyncQueue } from "../services/syncManager";
+import { subscribeSyncUpdates, processOfflineSyncQueue, pullLatestDataFromServer } from "../services/syncManager";
 
 interface AccountContextType {
   accounts: Account[];
@@ -72,7 +72,11 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     refreshAccounts();
-  }, [refreshAccounts]);
+    if (user?.uid) {
+      processOfflineSyncQueue();
+      pullLatestDataFromServer(user.uid);
+    }
+  }, [refreshAccounts, user?.uid]);
 
   useEffect(() => {
     const unsub = subscribeSyncUpdates(() => {

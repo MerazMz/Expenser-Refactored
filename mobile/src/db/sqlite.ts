@@ -790,3 +790,9 @@ export async function markSettingsSynced(userId: string) {
     await db.runAsync("UPDATE settings SET synced = 1 WHERE userId = ?", [userId]);
   });
 }
+
+export async function markAccountSynced(id: string) {
+  return await withSafeDb(async (db) => {
+    await db.runAsync("UPDATE accounts SET synced = 1 WHERE id = ?", [id]);
+  });
+}
