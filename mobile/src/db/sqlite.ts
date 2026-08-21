@@ -14,6 +14,7 @@ export interface Account {
   icon: string;
   isDefault: number;
   synced: number;
+  createdAt?: string;
   updatedAt: string;
 }
 
@@ -90,6 +91,7 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       icon TEXT DEFAULT 'wallet',
       isDefault INTEGER NOT NULL DEFAULT 0,
       synced INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT '',
       updatedAt TEXT NOT NULL
     );
 
@@ -128,6 +130,17 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
     );
   `);
 
+  // Migration: Ensure createdAt column exists on accounts
+  try {
+    const accInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(accounts)");
+    const hasCreatedAt = accInfo.some((col) => col.name === "createdAt");
+    if (!hasCreatedAt) {
+      await db.execAsync("ALTER TABLE accounts ADD COLUMN createdAt TEXT NOT NULL DEFAULT '';");
+    }
+  } catch (e) {
+    console.warn("Migration warning for createdAt column on accounts:", e);
+  }
+
   // Migration: Ensure accountId column exists on expenses
   try {
     const tableInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(expenses)");
@@ -158,7 +171,7 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
 export async function getLocalAccounts(userId: string): Promise<Account[]> {
   return await withSafeDb(async (db) => {
     let list = await db.getAllAsync<Account>(
-      "SELECT * FROM accounts WHERE userId = ? ORDER BY isDefault DESC, createdAt ASC",
+      "SELECT * FROM accounts WHERE userId = ? ORDER BY isDefault DESC, createdAt ASC, updatedAt ASC",
       [userId]
     );
 
@@ -180,12 +193,13 @@ export async function getLocalAccounts(userId: string): Promise<Account[]> {
         icon: "wallet",
         isDefault: 1,
         synced: 0,
+        createdAt: now,
         updatedAt: now,
       };
 
       await db.runAsync(
-        `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
+        `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
         [
           defaultAccount.id,
@@ -198,6 +212,8 @@ export async function getLocalAccounts(userId: string): Promise<Account[]> {
           defaultAccount.currency,
           defaultAccount.color,
           defaultAccount.icon,
+          defaultAccount.isDefault,
+          now,
           now,
         ]
       );
@@ -233,9 +249,11 @@ export async function saveLocalAccount(
     const icon = accountData.icon || (type === "flex" ? "utensils" : "wallet");
     const isDefault = accountData.isDefault ? 1 : 0;
 
+    const createdAt = accountData.createdAt || now;
+
     await db.runAsync(
-      `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+      `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          type = excluded.type,
@@ -260,6 +278,7 @@ export async function saveLocalAccount(
         color,
         icon,
         isDefault,
+        createdAt,
         now,
       ]
     );
@@ -277,6 +296,7 @@ export async function saveLocalAccount(
       icon,
       isDefault,
       synced: 0,
+      createdAt,
       updatedAt: now,
     };
 
@@ -341,8 +361,8 @@ export async function bulkUpsertAccountsFromServer(userId: string, serverAccount
     await db.withTransactionAsync(async () => {
       for (const acc of serverAccounts) {
         await db.runAsync(
-          `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+          `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              name = excluded.name,
              type = excluded.type,
@@ -367,6 +387,7 @@ export async function bulkUpsertAccountsFromServer(userId: string, serverAccount
             acc.color || "#10b981",
             acc.icon || "wallet",
             acc.isDefault ? 1 : 0,
+            acc.createdAt || now,
             acc.updatedAt || now,
           ]
         );
