@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 
 export interface Account {
   id: string;
@@ -685,7 +685,8 @@ export async function upsertSettingsFromServer(userId: string, serverSettings: a
 
 export async function calculateStreakFromLocal(userId: string, accountId?: string): Promise<number> {
   return await withSafeDb(async (db) => {
-    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const today = new Date();
+    const todayStr = format(today, "yyyy-MM-dd");
 
     let list: any[];
     if (accountId) {
@@ -694,7 +695,7 @@ export async function calculateStreakFromLocal(userId: string, accountId?: strin
         spent: number;
         saved: number;
         note: string;
-      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? AND (accountId = ? OR accountId IS NULL) ORDER BY date DESC", [
+      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? AND (accountId = ? OR accountId IS NULL)", [
         userId,
         accountId,
       ]);
@@ -704,16 +705,43 @@ export async function calculateStreakFromLocal(userId: string, accountId?: strin
         spent: number;
         saved: number;
         note: string;
-      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? ORDER BY date DESC", [
+      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ?", [
         userId,
       ]);
     }
 
     if (!list || list.length === 0) return 0;
 
-    let streak = 0;
+    const expenseMap = new Map<string, { spent: number; saved: number; note: string }>();
     for (const exp of list) {
-      if (exp.date > todayStr) continue;
+      expenseMap.set(exp.date, exp);
+    }
+
+    let streak = 0;
+
+    // Check today: if user saved today, add to streak; if over budget today, streak is 0
+    const todayExp = expenseMap.get(todayStr);
+    const todayHasData = todayExp && (todayExp.spent > 0 || (todayExp.note && todayExp.note.trim() !== ""));
+
+    if (todayHasData) {
+      if (todayExp.saved >= 0) {
+        streak++;
+      } else {
+        return 0; // Broken today
+      }
+    }
+
+    // Step backwards day by day from yesterday
+    for (let i = 1; i <= 365; i++) {
+      const prevDate = subDays(today, i);
+      const prevDateStr = format(prevDate, "yyyy-MM-dd");
+      const exp = expenseMap.get(prevDateStr);
+
+      if (!exp) {
+        // If there's a day gap without an entry, consecutive streak ends
+        break;
+      }
+
       const hasData = exp.spent > 0 || (exp.note && exp.note.trim() !== "");
       if (hasData) {
         if (exp.saved >= 0) {
@@ -722,12 +750,14 @@ export async function calculateStreakFromLocal(userId: string, accountId?: strin
           break;
         }
       } else {
-        if (exp.date < todayStr) {
+        if (exp.saved >= 0) {
+          streak++;
+        } else {
           break;
         }
-        continue;
       }
     }
+
     return streak;
   });
 }

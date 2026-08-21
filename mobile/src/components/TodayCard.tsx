@@ -87,27 +87,18 @@ export const TodayCard: React.FC<TodayCardProps> = ({
         },
       ]}
     >
-      {/* Soft, Subtle Ambient Liquid Glass Glow */}
+      {/* Soft, Subtle Ambient Glow in pure theme color */}
       <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
         <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
           <Defs>
-            {/* Top-Left Subtle Glow matching accent color */}
-            <RadialGradient id="liquidTopLeft" cx="10%" cy="10%" rx="80%" ry="80%">
-              <Stop offset="0%" stopColor={accentColor} stopOpacity="0.18" />
-              <Stop offset="40%" stopColor={accentColor} stopOpacity="0.05" />
-              <Stop offset="80%" stopColor="#000000" stopOpacity="0" />
-            </RadialGradient>
-
-            {/* Bottom-Right Subtle Glow */}
-            <RadialGradient id="liquidBottom" cx="90%" cy="90%" rx="80%" ry="80%">
-              <Stop offset="0%" stopColor={isFlex ? "#3b82f6" : "#0d9488"} stopOpacity="0.15" />
-              <Stop offset="40%" stopColor={accentColor} stopOpacity="0.04" />
-              <Stop offset="80%" stopColor="#000000" stopOpacity="0" />
+            <RadialGradient id="cardThemeGlow" cx="15%" cy="15%" rx="90%" ry="90%">
+              <Stop offset="0%" stopColor={accentColor} stopOpacity="0.14" />
+              <Stop offset="50%" stopColor={accentColor} stopOpacity="0.03" />
+              <Stop offset="100%" stopColor={accentColor} stopOpacity="0" />
             </RadialGradient>
           </Defs>
 
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#liquidTopLeft)" />
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#liquidBottom)" />
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#cardThemeGlow)" />
         </Svg>
       </View>
 

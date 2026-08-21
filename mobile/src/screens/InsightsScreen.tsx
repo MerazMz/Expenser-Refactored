@@ -203,7 +203,7 @@ export const InsightsScreen: React.FC = () => {
               { color: isDark ? "#a1a1aa" : "#71717a" },
             ]}
           >
-            Understand your spending patterns
+            Spending analytics & patterns
           </Text>
         </View>
 
@@ -270,8 +270,8 @@ export const InsightsScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* 2x2 Metric Cards Grid */}
-      <View style={styles.metricsGrid}>
+        {/* 2x2 Metric Cards Grid */}
+        <View style={styles.metricsGrid}>
         {/* Avg Spend / Day */}
         <View
           style={[
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 16,
   },
   screenTitle: {
     fontFamily: "Outfit_800ExtraBold",
@@ -556,16 +556,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 11,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   monthLabel: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 13.5,
+    fontSize: 15,
   },
   metricsGrid: {
     flexDirection: "row",

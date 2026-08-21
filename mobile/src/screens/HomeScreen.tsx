@@ -293,38 +293,6 @@ export const HomeScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Center Account Switcher Pill */}
-          <TouchableOpacity
-            onPress={openSwitcher}
-            activeOpacity={0.75}
-            style={[
-              styles.accountPickerPill,
-              {
-                backgroundColor: isDark ? "rgba(24, 24, 27, 0.9)" : "rgba(255, 255, 255, 0.9)",
-                borderColor: activeAccount?.color ? `${activeAccount.color}60` : isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.accountPickerDot,
-                { backgroundColor: activeAccount?.color || "#10b981" },
-              ]}
-            >
-              <ActiveIcon size={11} color="#ffffff" />
-            </View>
-            <Text
-              style={[
-                styles.accountPickerName,
-                { color: isDark ? "#e4e4e7" : "#27272a" },
-              ]}
-              numberOfLines={1}
-            >
-              {activeAccount?.name || "Daily Savings"}
-            </Text>
-            <ChevronDown size={13} color={isDark ? "#a1a1aa" : "#71717a"} style={{ marginLeft: 3 }} />
-          </TouchableOpacity>
-
           {/* Streak Flame Badge */}
           {streak >= 0 && (
             <TouchableOpacity
@@ -358,24 +326,58 @@ export const HomeScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Date Section */}
+        {/* Date & Account Section */}
         <View style={styles.dateSection}>
-          <Text
+          <View>
+            <Text
+              style={[
+                styles.dateSub,
+                { color: isDark ? "#a1a1aa" : "#71717a" },
+              ]}
+            >
+              Today
+            </Text>
+            <Text
+              style={[
+                styles.dateTitle,
+                { color: isDark ? "#f4f4f5" : "#18181b" },
+              ]}
+            >
+              {format(new Date(), "d MMM yyyy")}
+            </Text>
+          </View>
+
+          {/* Clean Account Switcher Button */}
+          <TouchableOpacity
+            onPress={openSwitcher}
+            activeOpacity={0.8}
             style={[
-              styles.dateSub,
-              { color: isDark ? "#a1a1aa" : "#71717a" },
+              styles.accountPickerPill,
+              {
+                backgroundColor: isDark ? "#181920" : "#f4f4f5",
+                borderColor: isDark ? "#282a36" : "#e4e4e7",
+              },
             ]}
           >
-            Today
-          </Text>
-          <Text
-            style={[
-              styles.dateTitle,
-              { color: isDark ? "#f4f4f5" : "#18181b" },
-            ]}
-          >
-            {format(new Date(), "d MMM yyyy")}
-          </Text>
+            <View
+              style={[
+                styles.accountPickerDot,
+                { backgroundColor: activeAccount?.color || (isFlexAccount ? "#3b82f6" : "#10b981") },
+              ]}
+            >
+              <ActiveIcon size={11} color="#ffffff" />
+            </View>
+            <Text
+              style={[
+                styles.accountPickerName,
+                { color: isDark ? "#f4f4f5" : "#18181b" },
+              ]}
+              numberOfLines={1}
+            >
+              {activeAccount?.name || "Daily Savings"}
+            </Text>
+            <ChevronDown size={13} color={isDark ? "#828799" : "#71717a"} style={{ marginLeft: 3 }} />
+          </TouchableOpacity>
         </View>
 
         {/* Content Stack */}
@@ -754,31 +756,48 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     textTransform: "lowercase",
   },
+  dateSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  dateSub: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  dateTitle: {
+    fontFamily: "Outfit_800ExtraBold",
+    fontSize: 22,
+    letterSpacing: -0.5,
+  },
   accountPickerPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 12,
     borderWidth: 1,
     maxWidth: 160,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
   },
   accountPickerDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 6,
   },
   accountPickerName: {
-    fontFamily: "Outfit_700Bold",
-    fontSize: 11.5,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
     flexShrink: 1,
   },
   streakBadge: {
@@ -804,20 +823,6 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-  },
-  dateSection: {
-    marginBottom: 14,
-  },
-  dateSub: {
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 11,
-    marginBottom: 2,
-    letterSpacing: 0.2,
-  },
-  dateTitle: {
-    fontFamily: "Outfit_800ExtraBold",
-    fontSize: 24,
-    letterSpacing: -0.6,
   },
   stack: {
     gap: 14,

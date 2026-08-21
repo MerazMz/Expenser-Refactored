@@ -43,8 +43,6 @@ import { useAuth } from "../context/AuthContext";
 import { useAppTheme } from "../theme/ThemeContext";
 import { useAccount } from "../context/AccountContext";
 import { useKeyboardHeight } from "../hooks/useKeyboardHeight";
-import { AccountSwitcherSheet } from "../components/AccountSwitcherSheet";
-import { CreateAccountModal } from "../components/CreateAccountModal";
 import {
   getLocalExpensesByMonth,
   getLocalSettings,
@@ -57,21 +55,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { evaluateSpendExpression } from "../components/SpendInput";
 
-const ICON_MAP: Record<string, any> = {
-  wallet: Wallet,
-  utensils: Utensils,
-  "shopping-bag": ShoppingBag,
-  "credit-card": CreditCard,
-  sparkles: Sparkles,
-  "trending-up": TrendingUp,
-};
-
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export const CalendarScreen: React.FC = () => {
   const { user, refreshSession } = useAuth();
   const { colors, isDark } = useAppTheme();
-  const { activeAccount, openSwitcher } = useAccount();
+  const { activeAccount } = useAccount();
   const keyboardHeight = useKeyboardHeight();
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -265,85 +254,48 @@ export const CalendarScreen: React.FC = () => {
     }
   };
 
-  const ActiveIcon = ICON_MAP[activeAccount?.icon || "wallet"] || Wallet;
-
   return (
-    <>
-      <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Top Header with Account Picker */}
-        <View style={styles.topAccountRow}>
-          <TouchableOpacity
-            onPress={openSwitcher}
-            activeOpacity={0.75}
-            style={[
-              styles.accountPickerPill,
-              {
-                backgroundColor: isDark ? "rgba(24, 24, 27, 0.9)" : "rgba(255, 255, 255, 0.9)",
-                borderColor: activeAccount?.color ? `${activeAccount.color}60` : isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.accountPickerDot,
-                { backgroundColor: activeAccount?.color || "#10b981" },
-              ]}
-            >
-              <ActiveIcon size={11} color="#ffffff" />
-            </View>
-            <Text
-              style={[
-                styles.accountPickerName,
-                { color: isDark ? "#e4e4e7" : "#27272a" },
-              ]}
-              numberOfLines={1}
-            >
-              {activeAccount?.name || "Daily Savings"}
-            </Text>
-            <ChevronDown size={13} color={isDark ? "#a1a1aa" : "#71717a"} style={{ marginLeft: 3 }} />
-          </TouchableOpacity>
-        </View>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Month Navigator Header with Centered Title & Chevrons */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity
+          onPress={handlePrevMonth}
+          disabled={!canGoPrev}
+          style={[
+            styles.chevronBtn,
+            {
+              backgroundColor: colors.inputBg,
+              opacity: canGoPrev ? 1 : 0.3,
+            },
+          ]}
+          activeOpacity={0.7}
+        >
+          <ChevronLeft size={20} color={colors.text} strokeWidth={2.2} />
+        </TouchableOpacity>
 
-        {/* Month Navigator Header with Centered Title & Chevrons */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            onPress={handlePrevMonth}
-            disabled={!canGoPrev}
-            style={[
-              styles.chevronBtn,
-              {
-                backgroundColor: colors.inputBg,
-                opacity: canGoPrev ? 1 : 0.3,
-              },
-            ]}
-            activeOpacity={0.7}
-          >
-            <ChevronLeft size={20} color={colors.text} strokeWidth={2.2} />
-          </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          {format(currentDate, "MMMM yyyy")}
+        </Text>
 
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {format(currentDate, "MMMM yyyy")}
-          </Text>
-
-          <TouchableOpacity
-            onPress={handleNextMonth}
-            disabled={!canGoNext}
-            style={[
-              styles.chevronBtn,
-              {
-                backgroundColor: colors.inputBg,
-                opacity: canGoNext ? 1 : 0.3,
-              },
-            ]}
-            activeOpacity={0.7}
-          >
-            <ChevronRight size={20} color={colors.text} strokeWidth={2.2} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={handleNextMonth}
+          disabled={!canGoNext}
+          style={[
+            styles.chevronBtn,
+            {
+              backgroundColor: colors.inputBg,
+              opacity: canGoNext ? 1 : 0.3,
+            },
+          ]}
+          activeOpacity={0.7}
+        >
+          <ChevronRight size={20} color={colors.text} strokeWidth={2.2} />
+        </TouchableOpacity>
+      </View>
 
         {/* Weekdays Header */}
         <View style={styles.calendarWrapper}>
@@ -774,14 +726,7 @@ export const CalendarScreen: React.FC = () => {
         </View>
       </Modal>
     </ScrollView>
-
-    {/* Multi-Account Switcher Bottom Sheet */}
-    <AccountSwitcherSheet />
-
-    {/* Create / Edit Account Modal */}
-    <CreateAccountModal />
-  </>
-);
+  );
 };
 
 const styles = StyleSheet.create({
@@ -793,22 +738,34 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "ios" ? 54 : 38,
     paddingBottom: 110,
   },
-  topAccountRow: {
+  topHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
-    marginBottom: 12,
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  screenSubTitle: {
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 11,
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  screenMainTitle: {
+    fontFamily: "Outfit_800ExtraBold",
+    fontSize: 22,
+    letterSpacing: -0.5,
   },
   accountPickerPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 12,
     borderWidth: 1,
+    maxWidth: 160,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
   },
