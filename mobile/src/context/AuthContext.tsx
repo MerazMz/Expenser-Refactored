@@ -162,17 +162,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const authUser: AuthUser = {
-      uid: res.user.uid,
+      uid: res.user.uid || res.user.id,
       email: res.user.email,
       displayName: res.user.displayName,
       photoURL: res.user.photoURL,
       hasSettings: res.user.hasSettings ?? true,
     };
 
-    // 1. Strictly fetch all settings and expenses and write to SQLite first
-    await pullLatestDataFromServer(authUser.uid);
-
-    // 2. Persist authentication session (keeps user logged in for 30 days)
+    // 1. Persist authentication session (keeps user logged in for 30 days)
     if (res.token) {
       await AsyncStorage.setItem(AUTH_TOKEN_KEY, res.token);
     }
@@ -180,10 +177,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await AsyncStorage.setItem(AUTH_TIMESTAMP_KEY, Date.now().toString());
     await setRememberedEmail(email);
 
-    // 3. Mark onboarded and set user state to trigger dashboard display with full data
+    // 2. Mark onboarded and set user state
     setIsOnboarded(true);
     setUser(authUser);
     initializeAutoSync(authUser.uid);
+
+    // 3. Fetch latest from server in background
+    try {
+      await pullLatestDataFromServer(authUser.uid);
+    } catch (e) {
+      console.log("Background pull on login:", e);
+    }
 
     return { success: true };
   };
@@ -199,14 +203,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const authUser: AuthUser = {
-      uid: res.user.uid,
+      uid: res.user.uid || res.user.id,
       email: res.user.email,
       displayName: res.user.displayName,
       photoURL: res.user.photoURL,
       hasSettings: res.user.hasSettings ?? !res.isNewUser,
     };
-
-    await pullLatestDataFromServer(authUser.uid);
 
     if (res.token) {
       await AsyncStorage.setItem(AUTH_TOKEN_KEY, res.token);
@@ -219,6 +221,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(authUser);
     initializeAutoSync(authUser.uid);
 
+    try {
+      await pullLatestDataFromServer(authUser.uid);
+    } catch (e) {
+      console.log("Background pull on Google login:", e);
+    }
+
     return { success: true, isNewUser: res.isNewUser };
   };
 
@@ -229,13 +237,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const authUser: AuthUser = {
-      uid: res.user.uid,
+      uid: res.user.uid || res.user.id,
       email: res.user.email,
       displayName: res.user.displayName,
       hasSettings: false,
     };
 
-    setUser(authUser);
     if (res.token) {
       await AsyncStorage.setItem(AUTH_TOKEN_KEY, res.token);
     }
@@ -245,6 +252,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // New user needs onboarding setup
     setIsOnboarded(false);
+    setUser(authUser);
     initializeAutoSync(authUser.uid);
 
     return { success: true };
