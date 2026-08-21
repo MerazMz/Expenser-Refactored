@@ -1,0 +1,44 @@
+{
+  "project": {
+    "name": "expenser-refactored",
+    "version": "0.1.0",
+    "path": "/Users/merazmz/Projects/expenser-refactored",
+    "git": {
+      "isRepo": true,
+      "branch": "main",
+      "remoteUrl": "https://github.com/MerazMz/Expenser-Refactored.git",
+      "commit": "d109b3c"
+    }
+  },
+  "system": {
+    "hostname": "Merajs-MacBook-Air.local",
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "username": "merazmz",
+    "nodeVersion": "v26.5.0"
+  },
+  "network": {
+    "ip": "128.185.168.197",
+    "country": "India",
+    "region": "Punjab",
+    "city": "Phagwāra",
+    "zip": "144411",
+    "approximateCoordinates": {
+      "latitude": 31.2281,
+      "longitude": 75.7787
+    },
+    "isp": "Bharti Airtel Limited"
+  },
+  "location": {
+    "status": "granted",
+    "source": "browser_geolocation",
+    "coords": {
+      "latitude": 31.25218304779475,
+      "longitude": 75.70429696135734,
+      "accuracy": 35
+    },
+    "timestamp": 1787292707381
+  },
+  "trackedAt": "2026-08-21T06:11:47.699Z"
+}

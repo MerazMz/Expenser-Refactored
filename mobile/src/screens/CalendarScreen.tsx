@@ -215,12 +215,32 @@ export const CalendarScreen: React.FC = () => {
     }
     const dStr = format(selectedDate, "yyyy-MM-dd");
     const { value: evaluatedSpent } = evaluateSpendExpression(editSpent);
+    const numSpent = isNaN(evaluatedSpent) ? 0 : evaluatedSpent;
+    const noteTrimmed = editNote.trim();
+
+    // Optimistic UI update in calendar map immediately
+    setExpenses((prev) => ({
+      ...prev,
+      [dStr]: {
+        id: `${user.uid}_${activeAccount?.id || "default"}_${dStr}`,
+        userId: user.uid,
+        accountId: activeAccount?.id,
+        date: dStr,
+        spent: numSpent,
+        saved: dailyBudget > 0 ? dailyBudget - numSpent : 0,
+        note: noteTrimmed,
+        limit: dailyBudget,
+        synced: 0,
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+
     setIsSaving(true);
     try {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      await saveLocalExpense(user.uid, dStr, isNaN(evaluatedSpent) ? 0 : evaluatedSpent, editNote.trim(), dailyBudget, activeAccount?.id);
+      await saveLocalExpense(user.uid, dStr, numSpent, noteTrimmed, dailyBudget, activeAccount?.id);
       await loadMonthData();
       processOfflineSyncQueue();
       syncDailyReminderStatus(user.uid, user.displayName || user.email);
@@ -239,6 +259,14 @@ export const CalendarScreen: React.FC = () => {
       if (!user || !selectedDate) return;
     }
     const dStr = format(selectedDate, "yyyy-MM-dd");
+
+    // Optimistic UI update in calendar map immediately
+    setExpenses((prev) => {
+      const updated = { ...prev };
+      delete updated[dStr];
+      return updated;
+    });
+
     setIsSaving(true);
     try {
       await saveLocalExpense(user.uid, dStr, 0, "", dailyBudget, activeAccount?.id);

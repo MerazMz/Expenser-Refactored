@@ -213,6 +213,14 @@ export const HomeScreen: React.FC = () => {
       if (!user) return;
     }
     const todayStr = format(new Date(), "yyyy-MM-dd");
+
+    // Optimistic UI update immediately
+    setTodayExpense((prev) => ({
+      ...prev,
+      spent,
+      note,
+    }));
+
     try {
       await saveLocalExpense(user.uid, todayStr, spent, note, dailyBudget, activeAccount?.id);
       await loadDashboardData();
@@ -232,6 +240,14 @@ export const HomeScreen: React.FC = () => {
     const { value: evaluatedSpent } = evaluateSpendExpression(modalSpentInput);
     const todayStr = format(new Date(), "yyyy-MM-dd");
     setIsSavingModal(true);
+
+    // Optimistic UI update immediately
+    setTodayExpense((prev) => ({
+      ...prev,
+      spent: evaluatedSpent,
+      note: modalNoteInput.trim(),
+    }));
+
     try {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
