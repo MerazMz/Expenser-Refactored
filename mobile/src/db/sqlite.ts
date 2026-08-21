@@ -66,18 +66,19 @@ export async function withSafeDb<T>(fn: (db: SQLite.SQLiteDatabase) => Promise<T
     const db = await getDatabase();
     return await fn(db);
   } catch (error) {
-    console.warn("SQLite query failed, re-establishing database connection and retrying...", error);
-    dbInstance = null;
-    initPromise = null;
-    const db = await getDatabase();
-    return await fn(db);
+    console.error("SQLite query error:", error);
+    throw error;
   }
 }
 
 async function initDatabase(db: SQLite.SQLiteDatabase) {
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
+  try {
+    await db.execAsync("PRAGMA journal_mode = WAL;");
+  } catch (e) {
+    // Non-critical for WAL pragma
+  }
 
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
@@ -94,9 +95,13 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       createdAt TEXT NOT NULL DEFAULT '',
       updatedAt TEXT NOT NULL
     );
+  `);
 
+  await db.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(userId);
+  `);
 
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS expenses (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
@@ -109,7 +114,9 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       synced INTEGER NOT NULL DEFAULT 0,
       updatedAt TEXT NOT NULL
     );
+  `);
 
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS settings (
       userId TEXT PRIMARY KEY,
       activeAccountId TEXT,
@@ -121,7 +128,9 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       synced INTEGER NOT NULL DEFAULT 0,
       updatedAt TEXT NOT NULL
     );
+  `);
 
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action TEXT NOT NULL,
@@ -132,10 +141,12 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
 
   // Migration: Ensure createdAt column exists on accounts
   try {
-    const accInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(accounts)");
-    const hasCreatedAt = accInfo.some((col) => col.name === "createdAt");
-    if (!hasCreatedAt) {
-      await db.execAsync("ALTER TABLE accounts ADD COLUMN createdAt TEXT NOT NULL DEFAULT '';");
+    const accInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(accounts);");
+    if (accInfo && Array.isArray(accInfo)) {
+      const hasCreatedAt = accInfo.some((col) => col.name === "createdAt");
+      if (!hasCreatedAt) {
+        await db.execAsync("ALTER TABLE accounts ADD COLUMN createdAt TEXT NOT NULL DEFAULT '';");
+      }
     }
   } catch (e) {
     console.warn("Migration warning for createdAt column on accounts:", e);
@@ -143,10 +154,12 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
 
   // Migration: Ensure accountId column exists on expenses
   try {
-    const tableInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(expenses)");
-    const hasAccountId = tableInfo.some((col) => col.name === "accountId");
-    if (!hasAccountId) {
-      await db.execAsync("ALTER TABLE expenses ADD COLUMN accountId TEXT;");
+    const tableInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(expenses);");
+    if (tableInfo && Array.isArray(tableInfo)) {
+      const hasAccountId = tableInfo.some((col) => col.name === "accountId");
+      if (!hasAccountId) {
+        await db.execAsync("ALTER TABLE expenses ADD COLUMN accountId TEXT;");
+      }
     }
   } catch (e) {
     console.warn("Migration warning for accountId column on expenses:", e);
@@ -154,10 +167,12 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
 
   // Migration: Ensure activeAccountId column exists on settings
   try {
-    const setInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(settings)");
-    const hasActiveAccount = setInfo.some((col) => col.name === "activeAccountId");
-    if (!hasActiveAccount) {
-      await db.execAsync("ALTER TABLE settings ADD COLUMN activeAccountId TEXT;");
+    const setInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(settings);");
+    if (setInfo && Array.isArray(setInfo)) {
+      const hasActiveAccount = setInfo.some((col) => col.name === "activeAccountId");
+      if (!hasActiveAccount) {
+        await db.execAsync("ALTER TABLE settings ADD COLUMN activeAccountId TEXT;");
+      }
     }
   } catch (e) {
     console.warn("Migration warning for activeAccountId column on settings:", e);
