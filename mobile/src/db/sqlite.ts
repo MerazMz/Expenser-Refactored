@@ -129,6 +129,14 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       "createdAt TEXT NOT NULL)"
   );
 
+  // Migration: Ensure legacy unique indexes on (userId, date) are dropped
+  try {
+    await db.execAsync("DROP INDEX IF EXISTS idx_expenses_user_date");
+    await db.execAsync("DROP INDEX IF EXISTS idx_expenses_date");
+  } catch (e) {
+    // ignore
+  }
+
   // Migration: Ensure createdAt column exists on accounts
   try {
     const accInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(accounts)");
@@ -513,15 +521,8 @@ export async function saveLocalExpense(
     const saved = limit > 0 ? limit - spent : 0;
 
     await db.runAsync(
-      `INSERT INTO expenses (id, userId, accountId, date, limitAmount, spent, saved, note, synced, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         limitAmount = excluded.limitAmount,
-         spent = excluded.spent,
-         saved = excluded.saved,
-         note = excluded.note,
-         synced = 0,
-         updatedAt = excluded.updatedAt`,
+      `INSERT OR REPLACE INTO expenses (id, userId, accountId, date, limitAmount, spent, saved, note, synced, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       [id, userId, actId, date, limit, spent, saved, note, now]
     );
 
@@ -550,15 +551,8 @@ export async function bulkUpsertExpensesFromServer(userId: string, serverExpense
         const note = exp.note || "";
 
         await db.runAsync(
-          `INSERT INTO expenses (id, userId, accountId, date, limitAmount, spent, saved, note, synced, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             limitAmount = excluded.limitAmount,
-             spent = excluded.spent,
-             saved = excluded.saved,
-             note = excluded.note,
-             synced = 1,
-             updatedAt = excluded.updatedAt`,
+          `INSERT OR REPLACE INTO expenses (id, userId, accountId, date, limitAmount, spent, saved, note, synced, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
           [id, userId, actId, exp.date, limit, spent, saved, note, exp.updatedAt || now]
         );
       }
