@@ -8,7 +8,7 @@ import {
   setActiveAccountId,
 } from "../db/sqlite";
 import { useAuth } from "./AuthContext";
-import { subscribeSyncUpdates } from "../services/syncManager";
+import { subscribeSyncUpdates, processOfflineSyncQueue } from "../services/syncManager";
 
 interface AccountContextType {
   accounts: Account[];
@@ -122,6 +122,7 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const localAccs = await getLocalAccounts(user.uid);
     setAccounts(localAccs);
     setActiveAccount(newAcc);
+    processOfflineSyncQueue();
     setIsCreateModalOpen(false);
     setEditingAccount(null);
     return newAcc;
@@ -135,6 +136,7 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (activeAccount?.id === updated.id) {
       setActiveAccount(updated);
     }
+    processOfflineSyncQueue();
     setIsCreateModalOpen(false);
     setEditingAccount(null);
     return updated;
@@ -155,6 +157,7 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       setActiveAccount(nextAcc);
     }
+    processOfflineSyncQueue();
   };
 
   const openSwitcher = () => setIsSwitcherOpen(true);
@@ -173,8 +176,8 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const closeCreateModal = () => {
-    setEditingAccount(null);
     setIsCreateModalOpen(false);
+    setEditingAccount(null);
   };
 
   return (

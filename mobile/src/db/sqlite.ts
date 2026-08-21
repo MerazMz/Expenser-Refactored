@@ -359,7 +359,9 @@ export async function bulkUpsertAccountsFromServer(userId: string, serverAccount
   return await withSafeDb(async (db) => {
     const now = new Date().toISOString();
     await db.withTransactionAsync(async () => {
+      const serverIds: string[] = [];
       for (const acc of serverAccounts) {
+        serverIds.push(acc.id);
         await db.runAsync(
           `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
@@ -390,6 +392,15 @@ export async function bulkUpsertAccountsFromServer(userId: string, serverAccount
             acc.createdAt || now,
             acc.updatedAt || now,
           ]
+        );
+      }
+
+      // Reconcile: remove local synced accounts that were deleted on the server
+      if (serverIds.length > 0) {
+        const placeholders = serverIds.map(() => "?").join(",");
+        await db.runAsync(
+          `DELETE FROM accounts WHERE userId = ? AND synced = 1 AND id NOT IN (${placeholders})`,
+          [userId, ...serverIds]
         );
       }
     });

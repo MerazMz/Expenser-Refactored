@@ -8,11 +8,13 @@ import {
   ScrollView,
   Dimensions,
   Platform,
+  Alert,
 } from "react-native";
 import {
   Check,
   Plus,
   Edit2,
+  Trash2,
   X,
   Wallet,
   Sparkles,
@@ -44,11 +46,37 @@ export const AccountSwitcherSheet: React.FC = () => {
     isSwitcherOpen,
     closeSwitcher,
     switchAccount,
+    deleteAccount,
     openCreateModal,
     openEditModal,
   } = useAccount();
   const { colors, isDark } = useAppTheme();
   const { user } = useAuth();
+
+  const handleDeleteAccount = (acc: Account) => {
+    if (accounts.length <= 1) {
+      Alert.alert("Cannot Delete", "You must have at least one active account.");
+      return;
+    }
+    Alert.alert(
+      "Delete Account",
+      `Are you sure you want to delete "${acc.name}"? All associated expense records will be deleted.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount(acc.id);
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to delete account.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   if (!isSwitcherOpen) return null;
 
@@ -207,6 +235,21 @@ export const AccountSwitcherSheet: React.FC = () => {
 
                   {/* Right Actions */}
                   <View style={styles.rightActions}>
+                    {accounts.length > 1 && (
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAccount(acc);
+                        }}
+                        style={[
+                          styles.deleteRowBtn,
+                          { backgroundColor: isDark ? "rgba(244, 63, 94, 0.15)" : "#fee2e2" },
+                        ]}
+                      >
+                        <Trash2 size={13} color="#f43f5e" />
+                      </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity
                       onPress={(e) => {
                         e.stopPropagation();
@@ -424,6 +467,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginLeft: 8,
+  },
+  deleteRowBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   editButton: {
     width: 30,

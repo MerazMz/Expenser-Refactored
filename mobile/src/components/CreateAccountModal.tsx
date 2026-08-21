@@ -141,6 +141,18 @@ export const CreateAccountModal: React.FC = () => {
 
   const handleDelete = () => {
     if (!editingAccount) return;
+    if (Platform.OS === "web") {
+      const ok = window.confirm(`Are you sure you want to delete "${editingAccount.name}"? All associated expense records will be deleted.`);
+      if (ok) {
+        deleteAccount(editingAccount.id)
+          .then(() => closeCreateModal())
+          .catch((e: any) => {
+            Alert.alert("Cannot Delete", e.message || "Unable to delete account.");
+          });
+      }
+      return;
+    }
+
     Alert.alert(
       "Delete Account",
       `Are you sure you want to delete "${editingAccount.name}"? All associated expense records will be deleted.`,
