@@ -58,8 +58,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 }
 
 /**
- * Executes a SQLite operation safely. If the connection died or was closed by the OS
- * while the app was backgrounded for hours, it automatically resets and retries.
+ * Executes a SQLite operation safely.
  */
 export async function withSafeDb<T>(fn: (db: SQLite.SQLiteDatabase) => Promise<T>): Promise<T> {
   try {
@@ -72,80 +71,71 @@ export async function withSafeDb<T>(fn: (db: SQLite.SQLiteDatabase) => Promise<T
 }
 
 async function initDatabase(db: SQLite.SQLiteDatabase) {
-  try {
-    await db.execAsync("PRAGMA journal_mode = WAL;");
-  } catch (e) {
-    // Non-critical for WAL pragma
-  }
+  // Create tables using clean single statements with no trailing delimiters
+  await db.execAsync(
+    "CREATE TABLE IF NOT EXISTS accounts (" +
+      "id TEXT PRIMARY KEY, " +
+      "userId TEXT NOT NULL, " +
+      "name TEXT NOT NULL, " +
+      "type TEXT NOT NULL DEFAULT 'budget', " +
+      "initialBalance REAL NOT NULL DEFAULT 0, " +
+      "monthlyBudget REAL NOT NULL DEFAULT 0, " +
+      "dailyBudget REAL NOT NULL DEFAULT 0, " +
+      "currency TEXT NOT NULL DEFAULT 'INR', " +
+      "color TEXT DEFAULT '#10b981', " +
+      "icon TEXT DEFAULT 'wallet', " +
+      "isDefault INTEGER NOT NULL DEFAULT 0, " +
+      "synced INTEGER NOT NULL DEFAULT 0, " +
+      "createdAt TEXT NOT NULL DEFAULT '', " +
+      "updatedAt TEXT NOT NULL)"
+  );
 
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS accounts (
-      id TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'budget',
-      initialBalance REAL NOT NULL DEFAULT 0,
-      monthlyBudget REAL NOT NULL DEFAULT 0,
-      dailyBudget REAL NOT NULL DEFAULT 0,
-      currency TEXT NOT NULL DEFAULT 'INR',
-      color TEXT DEFAULT '#10b981',
-      icon TEXT DEFAULT 'wallet',
-      isDefault INTEGER NOT NULL DEFAULT 0,
-      synced INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL DEFAULT '',
-      updatedAt TEXT NOT NULL
-    );
-  `);
+  await db.execAsync(
+    "CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(userId)"
+  );
 
-  await db.execAsync(`
-    CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(userId);
-  `);
+  await db.execAsync(
+    "CREATE TABLE IF NOT EXISTS expenses (" +
+      "id TEXT PRIMARY KEY, " +
+      "userId TEXT NOT NULL, " +
+      "accountId TEXT, " +
+      "date TEXT NOT NULL, " +
+      "limitAmount REAL NOT NULL DEFAULT 500, " +
+      "spent REAL NOT NULL DEFAULT 0, " +
+      "saved REAL NOT NULL DEFAULT 500, " +
+      "note TEXT DEFAULT '', " +
+      "synced INTEGER NOT NULL DEFAULT 0, " +
+      "updatedAt TEXT NOT NULL)"
+  );
 
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS expenses (
-      id TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      accountId TEXT,
-      date TEXT NOT NULL,
-      limitAmount REAL NOT NULL DEFAULT 500,
-      spent REAL NOT NULL DEFAULT 0,
-      saved REAL NOT NULL DEFAULT 500,
-      note TEXT DEFAULT '',
-      synced INTEGER NOT NULL DEFAULT 0,
-      updatedAt TEXT NOT NULL
-    );
-  `);
+  await db.execAsync(
+    "CREATE TABLE IF NOT EXISTS settings (" +
+      "userId TEXT PRIMARY KEY, " +
+      "activeAccountId TEXT, " +
+      "monthlyBudget REAL NOT NULL DEFAULT 15000, " +
+      "dailyBudget REAL NOT NULL DEFAULT 500, " +
+      "currency TEXT NOT NULL DEFAULT 'INR', " +
+      "theme TEXT NOT NULL DEFAULT 'system', " +
+      "currentMonth TEXT NOT NULL DEFAULT '', " +
+      "synced INTEGER NOT NULL DEFAULT 0, " +
+      "updatedAt TEXT NOT NULL)"
+  );
 
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS settings (
-      userId TEXT PRIMARY KEY,
-      activeAccountId TEXT,
-      monthlyBudget REAL NOT NULL DEFAULT 15000,
-      dailyBudget REAL NOT NULL DEFAULT 500,
-      currency TEXT NOT NULL DEFAULT 'INR',
-      theme TEXT NOT NULL DEFAULT 'system',
-      currentMonth TEXT NOT NULL DEFAULT '',
-      synced INTEGER NOT NULL DEFAULT 0,
-      updatedAt TEXT NOT NULL
-    );
-  `);
-
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS sync_queue (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      action TEXT NOT NULL,
-      payload TEXT NOT NULL,
-      createdAt TEXT NOT NULL
-    );
-  `);
+  await db.execAsync(
+    "CREATE TABLE IF NOT EXISTS sync_queue (" +
+      "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+      "action TEXT NOT NULL, " +
+      "payload TEXT NOT NULL, " +
+      "createdAt TEXT NOT NULL)"
+  );
 
   // Migration: Ensure createdAt column exists on accounts
   try {
-    const accInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(accounts);");
+    const accInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(accounts)");
     if (accInfo && Array.isArray(accInfo)) {
       const hasCreatedAt = accInfo.some((col) => col.name === "createdAt");
       if (!hasCreatedAt) {
-        await db.execAsync("ALTER TABLE accounts ADD COLUMN createdAt TEXT NOT NULL DEFAULT '';");
+        await db.execAsync("ALTER TABLE accounts ADD COLUMN createdAt TEXT NOT NULL DEFAULT ''");
       }
     }
   } catch (e) {
@@ -154,11 +144,11 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
 
   // Migration: Ensure accountId column exists on expenses
   try {
-    const tableInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(expenses);");
+    const tableInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(expenses)");
     if (tableInfo && Array.isArray(tableInfo)) {
       const hasAccountId = tableInfo.some((col) => col.name === "accountId");
       if (!hasAccountId) {
-        await db.execAsync("ALTER TABLE expenses ADD COLUMN accountId TEXT;");
+        await db.execAsync("ALTER TABLE expenses ADD COLUMN accountId TEXT");
       }
     }
   } catch (e) {
@@ -167,11 +157,11 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
 
   // Migration: Ensure activeAccountId column exists on settings
   try {
-    const setInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(settings);");
+    const setInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(settings)");
     if (setInfo && Array.isArray(setInfo)) {
       const hasActiveAccount = setInfo.some((col) => col.name === "activeAccountId");
       if (!hasActiveAccount) {
-        await db.execAsync("ALTER TABLE settings ADD COLUMN activeAccountId TEXT;");
+        await db.execAsync("ALTER TABLE settings ADD COLUMN activeAccountId TEXT");
       }
     }
   } catch (e) {
