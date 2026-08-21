@@ -446,8 +446,8 @@ export async function getLocalExpenseByDate(
     let res: any;
     if (accountId) {
       res = await db.getFirstAsync(
-        "SELECT * FROM expenses WHERE userId = ? AND date = ? AND (accountId = ? OR accountId IS NULL OR accountId = '') ORDER BY (CASE WHEN accountId = ? THEN 0 ELSE 1 END), updatedAt DESC",
-        [userId, date, accountId, accountId]
+        "SELECT * FROM expenses WHERE userId = ? AND date = ? AND accountId = ? ORDER BY updatedAt DESC",
+        [userId, date, accountId]
       );
     } else {
       res = await db.getFirstAsync(
@@ -473,8 +473,8 @@ export async function getLocalExpensesByMonth(
     let list: any[];
     if (accountId) {
       list = await db.getAllAsync(
-        "SELECT * FROM expenses WHERE userId = ? AND date LIKE ? AND (accountId = ? OR accountId IS NULL OR accountId = '') ORDER BY date ASC, (CASE WHEN accountId = ? THEN 0 ELSE 1 END), updatedAt DESC",
-        [userId, `${monthStr}%`, accountId, accountId]
+        "SELECT * FROM expenses WHERE userId = ? AND date LIKE ? AND accountId = ? ORDER BY date ASC, updatedAt DESC",
+        [userId, `${monthStr}%`, accountId]
       );
     } else {
       list = await db.getAllAsync(
@@ -483,10 +483,10 @@ export async function getLocalExpensesByMonth(
       );
     }
 
-    // Deduplicate by date prioritizing exact accountId match
+    // Deduplicate by date
     const map = new Map<string, any>();
     for (const item of list) {
-      if (!map.has(item.date) || item.accountId === accountId) {
+      if (!map.has(item.date)) {
         map.set(item.date, item);
       }
     }
@@ -503,8 +503,8 @@ export async function getAllLocalExpenses(userId: string, accountId?: string): P
     let list: any[];
     if (accountId) {
       list = await db.getAllAsync(
-        "SELECT * FROM expenses WHERE userId = ? AND (accountId = ? OR accountId IS NULL OR accountId = '') ORDER BY date ASC, (CASE WHEN accountId = ? THEN 0 ELSE 1 END), updatedAt DESC",
-        [userId, accountId, accountId]
+        "SELECT * FROM expenses WHERE userId = ? AND accountId = ? ORDER BY date ASC, updatedAt DESC",
+        [userId, accountId]
       );
     } else {
       list = await db.getAllAsync(
@@ -515,7 +515,7 @@ export async function getAllLocalExpenses(userId: string, accountId?: string): P
 
     const map = new Map<string, any>();
     for (const item of list) {
-      if (!map.has(item.date) || item.accountId === accountId) {
+      if (!map.has(item.date)) {
         map.set(item.date, item);
       }
     }
@@ -548,10 +548,14 @@ export async function saveLocalExpense(
     }
     const saved = limit > 0 ? limit - spent : 0;
 
-    // Delete any conflicting unassigned/legacy records for this (userId, date)
+    // Delete any previous row for this EXACT (userId, accountId, date) and any orphaned rows
     await db.runAsync(
-      "DELETE FROM expenses WHERE userId = ? AND date = ? AND (accountId = ? OR accountId IS NULL OR accountId = '' OR id = ?)",
-      [userId, date, actId, `${userId}_${date}`]
+      "DELETE FROM expenses WHERE userId = ? AND accountId = ? AND date = ?",
+      [userId, actId, date]
+    );
+    await db.runAsync(
+      "DELETE FROM expenses WHERE userId = ? AND date = ? AND (accountId IS NULL OR accountId = '' OR id = ?)",
+      [userId, date, `${userId}_${date}`]
     );
 
     await db.runAsync(
@@ -729,7 +733,7 @@ export async function calculateStreakFromLocal(userId: string, accountId?: strin
         spent: number;
         saved: number;
         note: string;
-      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? AND (accountId = ? OR accountId IS NULL)", [
+      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? AND accountId = ?", [
         userId,
         accountId,
       ]);

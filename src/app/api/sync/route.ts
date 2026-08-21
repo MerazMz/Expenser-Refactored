@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Calculate streak matching web logic
+    // Calculate streak strictly scoped to accountId if supplied
     const todayStr = format(new Date(), "yyyy-MM-dd");
     let streak = 0;
     const sortedDesc = [...expenses].sort((a, b) => (a.date > b.date ? -1 : 1));
@@ -239,18 +239,43 @@ export async function POST(req: NextRequest) {
       const numSpent = Number(spent) || 0;
       const saved = dailyLimit - numSpent;
 
-      // Validate accountId if supplied so foreign key does not fail
-      let validAccountId: string | undefined = undefined;
-      if (accountId) {
-        const existingAcc = await prisma.account.findUnique({ where: { id: accountId } });
-        if (existingAcc) {
-          validAccountId = accountId;
+      // Validate or resolve accountId
+      let validAccountId = accountId;
+      if (validAccountId) {
+        const existingAcc = await prisma.account.findUnique({ where: { id: validAccountId } });
+        if (!existingAcc) {
+          validAccountId = undefined;
         }
       }
+      if (!validAccountId) {
+        let defAcc = await prisma.account.findFirst({ where: { userId, isDefault: true } });
+        if (!defAcc) {
+          defAcc = await prisma.account.findFirst({ where: { userId } });
+        }
+        if (!defAcc) {
+          defAcc = await prisma.account.create({
+            data: {
+              id: `${userId}_default`,
+              userId,
+              name: "Daily Savings",
+              type: "budget",
+              initialBalance: 15000,
+              monthlyBudget: 15000,
+              dailyBudget: 500,
+              currency: "INR",
+              color: "#10b981",
+              icon: "wallet",
+              isDefault: true,
+            }
+          });
+        }
+        validAccountId = defAcc.id;
+      }
 
+      // Strictly isolate by (userId, accountId, date)
       const expense = await prisma.expense.upsert({
-        where: { userId_date: { userId, date } },
-        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit, accountId: validAccountId },
+        where: { userId_accountId_date: { userId, accountId: validAccountId, date } },
+        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit },
         create: { userId, accountId: validAccountId, date, spent: numSpent, saved, note: note || "", limit: dailyLimit },
       });
 
@@ -288,26 +313,28 @@ export async function POST(req: NextRequest) {
 
     if (action === "RESET_MONTH") {
       const { userId, accountId, monthStr } = payload;
-      const [year, month] = monthStr.split("-").map(Number);
-      const daysInMonth = new Date(year, month, 0).getDate();
+
+      const whereClause: any = {
+        userId,
+        date: { startsWith: monthStr },
+      };
+      if (accountId) {
+        whereClause.accountId = accountId;
+      }
 
       await prisma.expense.deleteMany({
-        where: {
-          userId,
-          accountId: accountId || null,
-          date: { startsWith: monthStr },
-        },
+        where: whereClause,
       });
 
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }
 
     return NextResponse.json(
-      { error: "Unknown action" },
+      { error: `Unknown action: ${action}` },
       { status: 400, headers: corsHeaders }
     );
   } catch (err: any) {
-    console.error("Sync API Error:", err);
+    console.error("Sync POST API Error:", err);
     return NextResponse.json(
       { error: err.message || "Internal server error" },
       { status: 500, headers: corsHeaders }

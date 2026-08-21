@@ -3,6 +3,31 @@
 import prisma from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
+async function resolveDefaultAccountId(userId: string): Promise<string> {
+  let defAcc = await prisma.account.findFirst({ where: { userId, isDefault: true } });
+  if (!defAcc) {
+    defAcc = await prisma.account.findFirst({ where: { userId } });
+  }
+  if (!defAcc) {
+    defAcc = await prisma.account.create({
+      data: {
+        id: `${userId}_default`,
+        userId,
+        name: "Daily Savings",
+        type: "budget",
+        initialBalance: 15000,
+        monthlyBudget: 15000,
+        dailyBudget: 500,
+        currency: "INR",
+        color: "#10b981",
+        icon: "wallet",
+        isDefault: true,
+      },
+    });
+  }
+  return defAcc.id;
+}
+
 export async function getSettings(userId: string) {
   if (!userId) return null;
   const settings = await prisma.settings.findUnique({
@@ -11,14 +36,13 @@ export async function getSettings(userId: string) {
   return settings;
 }
 
-export async function saveSettings(userId: string, data: {
-  monthlyBudget: number; // Mapped to Current Balance
-  dailyBudget: number;   // Mapped to Daily Budget
+export async function updateSettings(userId: string, data: {
+  monthlyBudget: number;
+  dailyBudget: number;
   currency?: string;
   theme?: string;
 }) {
   if (!userId) throw new Error("Unauthorized");
-
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -26,30 +50,34 @@ export async function saveSettings(userId: string, data: {
     where: { userId },
     update: {
       monthlyBudget: data.monthlyBudget,
+      dailyBudget: data.dailyBudget,
       currency: data.currency || 'INR',
       theme: data.theme || 'dark',
-      dailyBudget: data.dailyBudget,
       currentMonth,
     },
     create: {
       userId,
       monthlyBudget: data.monthlyBudget,
       dailyBudget: data.dailyBudget,
-      currentMonth,
       currency: data.currency || 'INR',
+      currentMonth,
       theme: data.theme || 'dark',
     },
   });
 
-  await generateMonthEntries(userId, currentMonth, data.dailyBudget);
+  const accountId = await resolveDefaultAccountId(userId);
+  await generateMonthEntries(userId, currentMonth, data.dailyBudget, accountId);
 
   revalidatePath("/");
   return updatedSettings;
 }
 
-export async function generateMonthEntries(userId: string, monthStr: string, dailyBudget: number) {
+export const saveSettings = updateSettings;
+
+export async function generateMonthEntries(userId: string, monthStr: string, dailyBudget: number, accountId?: string) {
   const [year, month] = monthStr.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
+  const actId = accountId || (await resolveDefaultAccountId(userId));
 
   const upsertPromises = [];
   for (let day = 1; day <= daysInMonth; day++) {
@@ -57,9 +85,10 @@ export async function generateMonthEntries(userId: string, monthStr: string, dai
     
     upsertPromises.push(
       prisma.expense.upsert({
-        where: { userId_date: { userId, date } },
+        where: { userId_accountId_date: { userId, accountId: actId, date } },
         create: {
           userId,
+          accountId: actId,
           date,
           limit: dailyBudget,
           spent: 0,
@@ -95,7 +124,7 @@ export async function updateTheme(userId: string, theme: string) {
   revalidatePath("/");
 }
 
-export async function resetMonth(userId: string) {
+export async function resetMonth(userId: string, accountId?: string) {
   if (!userId) return;
   const settings = await prisma.settings.findUnique({ where: { userId } });
   if (!settings) return;
@@ -107,6 +136,7 @@ export async function resetMonth(userId: string) {
   
   const daysInMonth = new Date(year, month, 0).getDate();
   const dailyBudget = settings.dailyBudget;
+  const actId = accountId || (await resolveDefaultAccountId(userId));
 
   await prisma.settings.update({
     where: { userId },
@@ -118,6 +148,7 @@ export async function resetMonth(userId: string) {
     const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     entries.push({
       userId,
+      accountId: actId,
       date,
       limit: dailyBudget,
       spent: 0,
@@ -130,6 +161,7 @@ export async function resetMonth(userId: string) {
     prisma.expense.deleteMany({
       where: {
         userId,
+        accountId: actId,
         date: { startsWith: currentMonth },
       },
     }),

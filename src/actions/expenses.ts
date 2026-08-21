@@ -4,64 +4,98 @@ import prisma from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { format } from "date-fns";
 
-export async function getTodayExpense(userId: string) {
+async function resolveAccountId(userId: string, accountId?: string): Promise<string> {
+  if (accountId) {
+    const exists = await prisma.account.findUnique({ where: { id: accountId } });
+    if (exists) return exists.id;
+  }
+  let defAcc = await prisma.account.findFirst({ where: { userId, isDefault: true } });
+  if (!defAcc) {
+    defAcc = await prisma.account.findFirst({ where: { userId } });
+  }
+  if (!defAcc) {
+    const settings = await prisma.settings.findUnique({ where: { userId } });
+    defAcc = await prisma.account.create({
+      data: {
+        id: `${userId}_default`,
+        userId,
+        name: "Daily Savings",
+        type: "budget",
+        initialBalance: settings?.monthlyBudget || 15000,
+        monthlyBudget: settings?.monthlyBudget || 15000,
+        dailyBudget: settings?.dailyBudget || 500,
+        currency: settings?.currency || "INR",
+        color: "#10b981",
+        icon: "wallet",
+        isDefault: true,
+      },
+    });
+  }
+  return defAcc.id;
+}
+
+export async function getTodayExpense(userId: string, accountId?: string) {
   if (!userId) return null;
   const now = new Date();
   const today = format(now, "yyyy-MM-dd");
+  const actId = await resolveAccountId(userId, accountId);
   
   let expense = await prisma.expense.findUnique({
-    where: { userId_date: { userId, date: today } },
+    where: { userId_accountId_date: { userId, accountId: actId, date: today } },
   });
   
   if (!expense) {
+    const account = await prisma.account.findUnique({ where: { id: actId } });
     const settings = await prisma.settings.findUnique({ where: { userId } });
-    if (settings) {
-      expense = await prisma.expense.upsert({
-        where: { userId_date: { userId, date: today } },
-        create: { 
-          userId,
-          date: today, 
-          limit: settings.dailyBudget, 
-          spent: 0, 
-          saved: settings.dailyBudget, 
-          note: '' 
-        },
-        update: {},
-      });
-    }
+    const dailyBudget = account ? (account.type === "flex" ? 0 : account.dailyBudget) : settings?.dailyBudget || 500;
+    
+    expense = await prisma.expense.upsert({
+      where: { userId_accountId_date: { userId, accountId: actId, date: today } },
+      create: { 
+        userId,
+        accountId: actId,
+        date: today, 
+        limit: dailyBudget, 
+        spent: 0, 
+        saved: dailyBudget, 
+        note: '' 
+      },
+      update: {},
+    });
   }
 
   return expense;
 }
 
-export async function saveTodayExpense(userId: string, spent: number, note?: string) {
+export async function saveTodayExpense(userId: string, spent: number, note?: string, accountId?: string) {
   if (!userId) return null;
   const now = new Date();
   const today = format(now, "yyyy-MM-dd");
-  return saveExpense(userId, today, spent, note);
+  return saveExpense(userId, today, spent, note, accountId);
 }
 
-export async function saveExpense(userId: string, date: string, spent: number, note?: string) {
+export async function saveExpense(userId: string, date: string, spent: number, note?: string, accountId?: string) {
   if (!userId) throw new Error("Unauthorized");
+  const actId = await resolveAccountId(userId, accountId);
   
   const currentExpense = await prisma.expense.findUnique({
-    where: { userId_date: { userId, date } },
+    where: { userId_accountId_date: { userId, accountId: actId, date } },
   });
   
   let limit = currentExpense?.limit || 0;
   if (!currentExpense) {
+    const account = await prisma.account.findUnique({ where: { id: actId } });
     const settings = await prisma.settings.findUnique({ where: { userId } });
-    if (settings) {
-      limit = settings.dailyBudget;
-    }
+    limit = account ? (account.type === "flex" ? 0 : account.dailyBudget) : settings?.dailyBudget || 500;
   }
   const saved = limit - spent;
 
   const expense = await prisma.expense.upsert({
-    where: { userId_date: { userId, date } },
+    where: { userId_accountId_date: { userId, accountId: actId, date } },
     update: { spent, saved, note: note || '' },
     create: {
       userId,
+      accountId: actId,
       date,
       limit,
       spent,
@@ -75,29 +109,38 @@ export async function saveExpense(userId: string, date: string, spent: number, n
   return expense;
 }
 
-export async function getMonthExpenses(userId: string, monthStr: string) {
+export async function getMonthExpenses(userId: string, monthStr: string, accountId?: string) {
   if (!userId) return [];
+  const whereClause: any = {
+    userId,
+    date: { startsWith: monthStr },
+  };
+  if (accountId) {
+    whereClause.accountId = accountId;
+  }
   const expenses = await prisma.expense.findMany({
-    where: {
-      userId,
-      date: { startsWith: monthStr },
-    },
+    where: whereClause,
     orderBy: { date: 'asc' },
   });
 
   return expenses;
 }
 
-export async function getMonthlySummary(userId: string, monthStr: string) {
+export async function getMonthlySummary(userId: string, monthStr: string, accountId?: string) {
   if (!userId) return { totalSpent: 0, totalSaved: 0, totalLimit: 0, totalLimitTillNow: 0 };
   const now = new Date();
   const todayStr = format(now, "yyyy-MM-dd");
 
+  const whereClause: any = {
+    userId,
+    date: { startsWith: monthStr },
+  };
+  if (accountId) {
+    whereClause.accountId = accountId;
+  }
+
   const expenses = await prisma.expense.findMany({
-    where: {
-      userId,
-      date: { startsWith: monthStr },
-    },
+    where: whereClause,
   });
 
   const summary = expenses.reduce((acc, curr) => {
@@ -117,19 +160,28 @@ export async function getMonthlySummary(userId: string, monthStr: string) {
   return summary;
 }
 
-export async function getExpenseByDate(userId: string, date: string) {
+export async function getExpenseByDate(userId: string, date: string, accountId?: string) {
   if (!userId) return null;
-  const expense = await prisma.expense.findUnique({
-    where: { userId_date: { userId, date } },
+  if (accountId) {
+    return await prisma.expense.findUnique({
+      where: { userId_accountId_date: { userId, accountId, date } },
+    });
+  }
+  return await prisma.expense.findFirst({
+    where: { userId, date },
+    orderBy: { updatedAt: "desc" },
   });
-  return expense;
 }
 
-export async function getStreak(userId: string) {
+export async function getStreak(userId: string, accountId?: string) {
   if (!userId) return 0;
+  const whereClause: any = { userId };
+  if (accountId) {
+    whereClause.accountId = accountId;
+  }
   
   const expenses = await prisma.expense.findMany({
-    where: { userId },
+    where: whereClause,
     orderBy: { date: 'desc' },
   });
     
@@ -157,14 +209,19 @@ export async function getStreak(userId: string) {
   return streak;
 }
 
-export async function getUserAvailableMonths(userId: string) {
+export async function getUserAvailableMonths(userId: string, accountId?: string) {
   if (!userId) return [];
   const now = new Date();
   const currentMonth = format(now, "yyyy-MM");
 
+  const whereExpense: any = { userId };
+  if (accountId) {
+    whereExpense.accountId = accountId;
+  }
+
   const [earliestExpense, user] = await Promise.all([
     prisma.expense.findFirst({
-      where: { userId },
+      where: whereExpense,
       orderBy: { date: 'asc' },
       select: { date: true },
     }),
