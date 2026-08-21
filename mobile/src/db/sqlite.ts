@@ -1,6 +1,36 @@
 import * as SQLite from "expo-sqlite";
 import { format } from "date-fns";
 
+export interface Account {
+  id: string;
+  userId: string;
+  name: string;
+  type: "budget" | "flex"; // 'budget' (Fixed Daily Budget) or 'flex' (Track As You Go)
+  initialBalance: number;
+  monthlyBudget: number;
+  dailyBudget: number;
+  currency: string;
+  color: string;
+  icon: string;
+  isDefault: number;
+  synced: number;
+  updatedAt: string;
+}
+
+export interface LocalExpense {
+  id: string;
+  userId: string;
+  accountId?: string;
+  date: string;
+  limit: number;
+  limitAmount?: number;
+  spent: number;
+  saved: number;
+  note: string;
+  synced: number;
+  updatedAt: string;
+}
+
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -47,9 +77,28 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
+    CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'budget',
+      initialBalance REAL NOT NULL DEFAULT 0,
+      monthlyBudget REAL NOT NULL DEFAULT 0,
+      dailyBudget REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'INR',
+      color TEXT DEFAULT '#10b981',
+      icon TEXT DEFAULT 'wallet',
+      isDefault INTEGER NOT NULL DEFAULT 0,
+      synced INTEGER NOT NULL DEFAULT 0,
+      updatedAt TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(userId);
+
     CREATE TABLE IF NOT EXISTS expenses (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
+      accountId TEXT,
       date TEXT NOT NULL,
       limitAmount REAL NOT NULL DEFAULT 500,
       spent REAL NOT NULL DEFAULT 0,
@@ -59,10 +108,9 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       updatedAt TEXT NOT NULL
     );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(userId, date);
-
     CREATE TABLE IF NOT EXISTS settings (
       userId TEXT PRIMARY KEY,
+      activeAccountId TEXT,
       monthlyBudget REAL NOT NULL DEFAULT 15000,
       dailyBudget REAL NOT NULL DEFAULT 500,
       currency TEXT NOT NULL DEFAULT 'INR',
@@ -79,22 +127,276 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       createdAt TEXT NOT NULL
     );
   `);
+
+  // Migration: Ensure accountId column exists on expenses
+  try {
+    const tableInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(expenses)");
+    const hasAccountId = tableInfo.some((col) => col.name === "accountId");
+    if (!hasAccountId) {
+      await db.execAsync("ALTER TABLE expenses ADD COLUMN accountId TEXT;");
+    }
+  } catch (e) {
+    console.warn("Migration warning for accountId column on expenses:", e);
+  }
+
+  // Migration: Ensure activeAccountId column exists on settings
+  try {
+    const setInfo = await db.getAllAsync<{ name: string }>("PRAGMA table_info(settings)");
+    const hasActiveAccount = setInfo.some((col) => col.name === "activeAccountId");
+    if (!hasActiveAccount) {
+      await db.execAsync("ALTER TABLE settings ADD COLUMN activeAccountId TEXT;");
+    }
+  } catch (e) {
+    console.warn("Migration warning for activeAccountId column on settings:", e);
+  }
 }
 
-// Local Expense Operations
-export async function getLocalExpenseByDate(userId: string, date: string) {
+// ----------------------------------------------------
+// Local Account Operations
+// ----------------------------------------------------
+
+export async function getLocalAccounts(userId: string): Promise<Account[]> {
   return await withSafeDb(async (db) => {
-    const res = await db.getFirstAsync<{
-      id: string;
-      userId: string;
-      date: string;
-      limitAmount: number;
-      spent: number;
-      saved: number;
-      note: string;
-      synced: number;
-      updatedAt: string;
-    }>("SELECT * FROM expenses WHERE userId = ? AND date = ?", [userId, date]);
+    let list = await db.getAllAsync<Account>(
+      "SELECT * FROM accounts WHERE userId = ? ORDER BY isDefault DESC, createdAt ASC",
+      [userId]
+    );
+
+    // If user has no accounts yet, auto-provision default account from settings
+    if (!list || list.length === 0) {
+      const set = await getLocalSettings(userId);
+      const defaultId = `${userId}_default`;
+      const now = new Date().toISOString();
+      const defaultAccount: Account = {
+        id: defaultId,
+        userId,
+        name: "Daily Savings",
+        type: "budget",
+        initialBalance: set?.monthlyBudget || 15000,
+        monthlyBudget: set?.monthlyBudget || 15000,
+        dailyBudget: set?.dailyBudget || 500,
+        currency: set?.currency || "INR",
+        color: "#10b981",
+        icon: "wallet",
+        isDefault: 1,
+        synced: 0,
+        updatedAt: now,
+      };
+
+      await db.runAsync(
+        `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
+         ON CONFLICT(id) DO NOTHING`,
+        [
+          defaultAccount.id,
+          defaultAccount.userId,
+          defaultAccount.name,
+          defaultAccount.type,
+          defaultAccount.initialBalance,
+          defaultAccount.monthlyBudget,
+          defaultAccount.dailyBudget,
+          defaultAccount.currency,
+          defaultAccount.color,
+          defaultAccount.icon,
+          now,
+        ]
+      );
+
+      // Backfill any existing expenses without accountId
+      await db.runAsync("UPDATE expenses SET accountId = ? WHERE userId = ? AND (accountId IS NULL OR accountId = '')", [
+        defaultId,
+        userId,
+      ]);
+
+      // Set activeAccountId on settings
+      await db.runAsync("UPDATE settings SET activeAccountId = ? WHERE userId = ?", [defaultId, userId]);
+
+      list = [defaultAccount];
+    }
+
+    return list;
+  });
+}
+
+export async function saveLocalAccount(
+  accountData: Partial<Account> & { userId: string; name: string }
+): Promise<Account> {
+  return await withSafeDb(async (db) => {
+    const id = accountData.id || `${accountData.userId}_${Date.now()}`;
+    const now = new Date().toISOString();
+    const type = accountData.type || "budget";
+    const initialBalance = Number(accountData.initialBalance ?? (type === "flex" ? 5000 : 15000));
+    const monthlyBudget = Number(accountData.monthlyBudget ?? (type === "budget" ? initialBalance : 0));
+    const dailyBudget = Number(accountData.dailyBudget ?? (type === "budget" ? 500 : 0));
+    const currency = accountData.currency || "INR";
+    const color = accountData.color || (type === "flex" ? "#3b82f6" : "#10b981");
+    const icon = accountData.icon || (type === "flex" ? "utensils" : "wallet");
+    const isDefault = accountData.isDefault ? 1 : 0;
+
+    await db.runAsync(
+      `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         type = excluded.type,
+         initialBalance = excluded.initialBalance,
+         monthlyBudget = excluded.monthlyBudget,
+         dailyBudget = excluded.dailyBudget,
+         currency = excluded.currency,
+         color = excluded.color,
+         icon = excluded.icon,
+         isDefault = excluded.isDefault,
+         synced = 0,
+         updatedAt = excluded.updatedAt`,
+      [
+        id,
+        accountData.userId,
+        accountData.name,
+        type,
+        initialBalance,
+        monthlyBudget,
+        dailyBudget,
+        currency,
+        color,
+        icon,
+        isDefault,
+        now,
+      ]
+    );
+
+    const savedAccount: Account = {
+      id,
+      userId: accountData.userId,
+      name: accountData.name,
+      type,
+      initialBalance,
+      monthlyBudget,
+      dailyBudget,
+      currency,
+      color,
+      icon,
+      isDefault,
+      synced: 0,
+      updatedAt: now,
+    };
+
+    // Queue sync action
+    await db.runAsync(
+      "INSERT INTO sync_queue (action, payload, createdAt) VALUES (?, ?, ?)",
+      [
+        accountData.id ? "UPDATE_ACCOUNT" : "CREATE_ACCOUNT",
+        JSON.stringify(savedAccount),
+        now,
+      ]
+    );
+
+    return savedAccount;
+  });
+}
+
+export async function deleteLocalAccount(userId: string, accountId: string): Promise<void> {
+  return await withSafeDb(async (db) => {
+    const now = new Date().toISOString();
+    await db.runAsync("DELETE FROM accounts WHERE id = ? AND userId = ?", [accountId, userId]);
+    await db.runAsync("DELETE FROM expenses WHERE accountId = ? AND userId = ?", [accountId, userId]);
+
+    await db.runAsync(
+      "INSERT INTO sync_queue (action, payload, createdAt) VALUES (?, ?, ?)",
+      ["DELETE_ACCOUNT", JSON.stringify({ id: accountId, userId }), now]
+    );
+  });
+}
+
+export async function getActiveAccountId(userId: string): Promise<string> {
+  return await withSafeDb(async (db) => {
+    const set = await db.getFirstAsync<{ activeAccountId: string }>(
+      "SELECT activeAccountId FROM settings WHERE userId = ?",
+      [userId]
+    );
+
+    if (set?.activeAccountId) {
+      return set.activeAccountId;
+    }
+
+    const accounts = await getLocalAccounts(userId);
+    return accounts[0]?.id || `${userId}_default`;
+  });
+}
+
+export async function setActiveAccountId(userId: string, accountId: string): Promise<void> {
+  return await withSafeDb(async (db) => {
+    await db.runAsync(
+      `INSERT INTO settings (userId, activeAccountId, monthlyBudget, dailyBudget, currency, theme, currentMonth, synced, updatedAt)
+       VALUES (?, ?, 15000, 500, 'INR', 'system', '', 0, ?)
+       ON CONFLICT(userId) DO UPDATE SET activeAccountId = excluded.activeAccountId, updatedAt = excluded.updatedAt`,
+      [userId, accountId, new Date().toISOString()]
+    );
+  });
+}
+
+export async function bulkUpsertAccountsFromServer(userId: string, serverAccounts: any[]) {
+  if (!serverAccounts || serverAccounts.length === 0) return;
+  return await withSafeDb(async (db) => {
+    const now = new Date().toISOString();
+    await db.withTransactionAsync(async () => {
+      for (const acc of serverAccounts) {
+        await db.runAsync(
+          `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name,
+             type = excluded.type,
+             initialBalance = excluded.initialBalance,
+             monthlyBudget = excluded.monthlyBudget,
+             dailyBudget = excluded.dailyBudget,
+             currency = excluded.currency,
+             color = excluded.color,
+             icon = excluded.icon,
+             isDefault = excluded.isDefault,
+             synced = 1,
+             updatedAt = excluded.updatedAt`,
+          [
+            acc.id,
+            userId,
+            acc.name || "My Account",
+            acc.type || "budget",
+            Number(acc.initialBalance ?? 0),
+            Number(acc.monthlyBudget ?? 0),
+            Number(acc.dailyBudget ?? 0),
+            acc.currency || "INR",
+            acc.color || "#10b981",
+            acc.icon || "wallet",
+            acc.isDefault ? 1 : 0,
+            acc.updatedAt || now,
+          ]
+        );
+      }
+    });
+  });
+}
+
+// ----------------------------------------------------
+// Local Expense Operations (Scoped by Account)
+// ----------------------------------------------------
+
+export async function getLocalExpenseByDate(
+  userId: string,
+  date: string,
+  accountId?: string
+): Promise<LocalExpense | null> {
+  return await withSafeDb(async (db) => {
+    let res: any;
+    if (accountId) {
+      res = await db.getFirstAsync(
+        "SELECT * FROM expenses WHERE userId = ? AND date = ? AND (accountId = ? OR accountId IS NULL)",
+        [userId, date, accountId]
+      );
+    } else {
+      res = await db.getFirstAsync(
+        "SELECT * FROM expenses WHERE userId = ? AND date = ?",
+        [userId, date]
+      );
+    }
 
     if (!res) return null;
     return {
@@ -104,22 +406,24 @@ export async function getLocalExpenseByDate(userId: string, date: string) {
   });
 }
 
-export async function getLocalExpensesByMonth(userId: string, monthStr: string) {
+export async function getLocalExpensesByMonth(
+  userId: string,
+  monthStr: string,
+  accountId?: string
+): Promise<LocalExpense[]> {
   return await withSafeDb(async (db) => {
-    const list = await db.getAllAsync<{
-      id: string;
-      userId: string;
-      date: string;
-      limitAmount: number;
-      spent: number;
-      saved: number;
-      note: string;
-      synced: number;
-      updatedAt: string;
-    }>("SELECT * FROM expenses WHERE userId = ? AND date LIKE ? ORDER BY date ASC", [
-      userId,
-      `${monthStr}%`,
-    ]);
+    let list: any[];
+    if (accountId) {
+      list = await db.getAllAsync(
+        "SELECT * FROM expenses WHERE userId = ? AND date LIKE ? AND (accountId = ? OR accountId IS NULL) ORDER BY date ASC",
+        [userId, `${monthStr}%`, accountId]
+      );
+    } else {
+      list = await db.getAllAsync(
+        "SELECT * FROM expenses WHERE userId = ? AND date LIKE ? ORDER BY date ASC",
+        [userId, `${monthStr}%`]
+      );
+    }
 
     return list.map((item) => ({
       ...item,
@@ -128,19 +432,20 @@ export async function getLocalExpensesByMonth(userId: string, monthStr: string) 
   });
 }
 
-export async function getAllLocalExpenses(userId: string) {
+export async function getAllLocalExpenses(userId: string, accountId?: string): Promise<LocalExpense[]> {
   return await withSafeDb(async (db) => {
-    const list = await db.getAllAsync<{
-      id: string;
-      userId: string;
-      date: string;
-      limitAmount: number;
-      spent: number;
-      saved: number;
-      note: string;
-      synced: number;
-      updatedAt: string;
-    }>("SELECT * FROM expenses WHERE userId = ? ORDER BY date ASC", [userId]);
+    let list: any[];
+    if (accountId) {
+      list = await db.getAllAsync(
+        "SELECT * FROM expenses WHERE userId = ? AND (accountId = ? OR accountId IS NULL) ORDER BY date ASC",
+        [userId, accountId]
+      );
+    } else {
+      list = await db.getAllAsync(
+        "SELECT * FROM expenses WHERE userId = ? ORDER BY date ASC",
+        [userId]
+      );
+    }
 
     return list.map((item) => ({
       ...item,
@@ -154,22 +459,25 @@ export async function saveLocalExpense(
   date: string,
   spent: number,
   note: string = "",
-  customLimit?: number
-) {
+  customLimit?: number,
+  accountId?: string
+): Promise<LocalExpense> {
   return await withSafeDb(async (db) => {
-    const id = `${userId}_${date}`;
+    const actId = accountId || (await getActiveAccountId(userId));
+    const id = `${userId}_${actId}_${date}`;
     const now = new Date().toISOString();
 
     let limit = customLimit;
     if (limit === undefined) {
-      const set = await getLocalSettings(userId);
-      limit = set?.dailyBudget || 500;
+      const accounts = await getLocalAccounts(userId);
+      const currentAcc = accounts.find((a) => a.id === actId);
+      limit = currentAcc?.type === "flex" ? 0 : currentAcc?.dailyBudget || 500;
     }
-    const saved = limit - spent;
+    const saved = limit > 0 ? limit - spent : 0;
 
     await db.runAsync(
-      `INSERT INTO expenses (id, userId, date, limitAmount, spent, saved, note, synced, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+      `INSERT INTO expenses (id, userId, accountId, date, limitAmount, spent, saved, note, synced, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
        ON CONFLICT(id) DO UPDATE SET
          limitAmount = excluded.limitAmount,
          spent = excluded.spent,
@@ -177,16 +485,16 @@ export async function saveLocalExpense(
          note = excluded.note,
          synced = 0,
          updatedAt = excluded.updatedAt`,
-      [id, userId, date, limit, spent, saved, note, now]
+      [id, userId, actId, date, limit, spent, saved, note, now]
     );
 
     // Add to offline sync queue
     await db.runAsync(
       "INSERT INTO sync_queue (action, payload, createdAt) VALUES (?, ?, ?)",
-      ["SAVE_EXPENSE", JSON.stringify({ userId, date, spent, note, limit }), now]
+      ["SAVE_EXPENSE", JSON.stringify({ userId, accountId: actId, date, spent, note, limit }), now]
     );
 
-    return { id, userId, date, limit, spent, saved, note, synced: 0, updatedAt: now };
+    return { id, userId, accountId: actId, date, limit, spent, saved, note, synced: 0, updatedAt: now };
   });
 }
 
@@ -197,15 +505,16 @@ export async function bulkUpsertExpensesFromServer(userId: string, serverExpense
 
     await db.withTransactionAsync(async () => {
       for (const exp of serverExpenses) {
-        const id = `${userId}_${exp.date}`;
+        const actId = exp.accountId || `${userId}_default`;
+        const id = exp.id || `${userId}_${actId}_${exp.date}`;
         const limit = Number(exp.limit ?? exp.limitAmount ?? 500);
         const spent = Number(exp.spent ?? 0);
-        const saved = exp.saved !== undefined ? Number(exp.saved) : limit - spent;
+        const saved = exp.saved !== undefined ? Number(exp.saved) : limit > 0 ? limit - spent : 0;
         const note = exp.note || "";
 
         await db.runAsync(
-          `INSERT INTO expenses (id, userId, date, limitAmount, spent, saved, note, synced, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+          `INSERT INTO expenses (id, userId, accountId, date, limitAmount, spent, saved, note, synced, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
            ON CONFLICT(id) DO UPDATE SET
              limitAmount = excluded.limitAmount,
              spent = excluded.spent,
@@ -213,33 +522,45 @@ export async function bulkUpsertExpensesFromServer(userId: string, serverExpense
              note = excluded.note,
              synced = 1,
              updatedAt = excluded.updatedAt`,
-          [id, userId, exp.date, limit, spent, saved, note, exp.updatedAt || now]
+          [id, userId, actId, exp.date, limit, spent, saved, note, exp.updatedAt || now]
         );
       }
     });
   });
 }
 
-export async function resetLocalMonthExpenses(userId: string, monthStr: string) {
+export async function resetLocalMonthExpenses(userId: string, monthStr: string, accountId?: string) {
   return await withSafeDb(async (db) => {
     const now = new Date().toISOString();
-    await db.runAsync("DELETE FROM expenses WHERE userId = ? AND date LIKE ?", [
-      userId,
-      `${monthStr}%`,
-    ]);
+    if (accountId) {
+      await db.runAsync("DELETE FROM expenses WHERE userId = ? AND accountId = ? AND date LIKE ?", [
+        userId,
+        accountId,
+        `${monthStr}%`,
+      ]);
+    } else {
+      await db.runAsync("DELETE FROM expenses WHERE userId = ? AND date LIKE ?", [
+        userId,
+        `${monthStr}%`,
+      ]);
+    }
 
     await db.runAsync(
       "INSERT INTO sync_queue (action, payload, createdAt) VALUES (?, ?, ?)",
-      ["RESET_MONTH", JSON.stringify({ userId, monthStr }), now]
+      ["RESET_MONTH", JSON.stringify({ userId, accountId, monthStr }), now]
     );
   });
 }
 
+// ----------------------------------------------------
 // Local Settings Operations
+// ----------------------------------------------------
+
 export async function getLocalSettings(userId: string) {
   return await withSafeDb(async (db) => {
     return await db.getFirstAsync<{
       userId: string;
+      activeAccountId?: string;
       monthlyBudget: number;
       dailyBudget: number;
       currency: string;
@@ -327,19 +648,35 @@ export async function upsertSettingsFromServer(userId: string, serverSettings: a
   });
 }
 
-// Streak & Month Calculation
-export async function calculateStreakFromLocal(userId: string): Promise<number> {
+// ----------------------------------------------------
+// Streak & Metrics Operations
+// ----------------------------------------------------
+
+export async function calculateStreakFromLocal(userId: string, accountId?: string): Promise<number> {
   return await withSafeDb(async (db) => {
     const todayStr = format(new Date(), "yyyy-MM-dd");
 
-    const list = await db.getAllAsync<{
-      date: string;
-      spent: number;
-      saved: number;
-      note: string;
-    }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? ORDER BY date DESC", [
-      userId,
-    ]);
+    let list: any[];
+    if (accountId) {
+      list = await db.getAllAsync<{
+        date: string;
+        spent: number;
+        saved: number;
+        note: string;
+      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? AND (accountId = ? OR accountId IS NULL) ORDER BY date DESC", [
+        userId,
+        accountId,
+      ]);
+    } else {
+      list = await db.getAllAsync<{
+        date: string;
+        spent: number;
+        saved: number;
+        note: string;
+      }>("SELECT date, spent, saved, note FROM expenses WHERE userId = ? ORDER BY date DESC", [
+        userId,
+      ]);
+    }
 
     if (!list || list.length === 0) return 0;
 
@@ -364,14 +701,22 @@ export async function calculateStreakFromLocal(userId: string): Promise<number> 
   });
 }
 
-export async function getUserAvailableMonthsFromLocal(userId: string): Promise<string[]> {
+export async function getUserAvailableMonthsFromLocal(userId: string, accountId?: string): Promise<string[]> {
   return await withSafeDb(async (db) => {
     const currentMonth = format(new Date(), "yyyy-MM");
 
-    const list = await db.getAllAsync<{ date: string }>(
-      "SELECT DISTINCT SUBSTR(date, 1, 7) as month FROM expenses WHERE userId = ? ORDER BY month DESC",
-      [userId]
-    );
+    let list: any[];
+    if (accountId) {
+      list = await db.getAllAsync<{ date: string }>(
+        "SELECT DISTINCT SUBSTR(date, 1, 7) as month FROM expenses WHERE userId = ? AND (accountId = ? OR accountId IS NULL) ORDER BY month DESC",
+        [userId, accountId]
+      );
+    } else {
+      list = await db.getAllAsync<{ date: string }>(
+        "SELECT DISTINCT SUBSTR(date, 1, 7) as month FROM expenses WHERE userId = ? ORDER BY month DESC",
+        [userId]
+      );
+    }
 
     const months = list.map((item) => (item as any).month).filter(Boolean);
     if (!months.includes(currentMonth)) {
@@ -381,7 +726,10 @@ export async function getUserAvailableMonthsFromLocal(userId: string): Promise<s
   });
 }
 
+// ----------------------------------------------------
 // Sync Queue helpers
+// ----------------------------------------------------
+
 export async function getPendingSyncQueue() {
   return await withSafeDb(async (db) => {
     return await db.getAllAsync<{

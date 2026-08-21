@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
+    const accountId = searchParams.get("accountId");
 
     if (!userId) {
       return NextResponse.json(
@@ -24,10 +25,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [settings, expenses, user] = await Promise.all([
+    const [settings, accounts, expenses, user] = await Promise.all([
       prisma.settings.findUnique({ where: { userId } }),
-      prisma.expense.findMany({
+      prisma.account.findMany({
         where: { userId },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.expense.findMany({
+        where: accountId ? { userId, accountId } : { userId },
         orderBy: { date: "asc" },
       }),
       prisma.user.findUnique({
@@ -63,6 +68,7 @@ export async function GET(req: NextRequest) {
         success: true,
         user,
         settings: settings || null,
+        accounts: accounts || [],
         expenses: expenses || [],
         streak,
       },
@@ -89,7 +95,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "PULL_DATA") {
-      const { userId } = payload;
+      const { userId, accountId } = payload;
       if (!userId) {
         return NextResponse.json(
           { error: "Missing userId" },
@@ -97,10 +103,14 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const [settings, expenses, user] = await Promise.all([
+      const [settings, accounts, expenses, user] = await Promise.all([
         prisma.settings.findUnique({ where: { userId } }),
-        prisma.expense.findMany({
+        prisma.account.findMany({
           where: { userId },
+          orderBy: { createdAt: "asc" },
+        }),
+        prisma.expense.findMany({
+          where: accountId ? { userId, accountId } : { userId },
           orderBy: { date: "asc" },
         }),
         prisma.user.findUnique({
@@ -135,6 +145,7 @@ export async function POST(req: NextRequest) {
           success: true,
           user,
           settings: settings || null,
+          accounts: accounts || [],
           expenses: expenses || [],
           streak,
         },
@@ -142,17 +153,66 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (action === "CREATE_ACCOUNT") {
+      const { id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault } = payload;
+      const account = await prisma.account.create({
+        data: {
+          id: id || undefined,
+          userId,
+          name: name || "My Expenses",
+          type: type || "budget",
+          initialBalance: Number(initialBalance) || 0,
+          monthlyBudget: Number(monthlyBudget) || 0,
+          dailyBudget: Number(dailyBudget) || 0,
+          currency: currency || "INR",
+          color: color || "#10b981",
+          icon: icon || "wallet",
+          isDefault: Boolean(isDefault),
+        },
+      });
+
+      return NextResponse.json({ success: true, account }, { headers: corsHeaders });
+    }
+
+    if (action === "UPDATE_ACCOUNT") {
+      const { id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault } = payload;
+      const account = await prisma.account.update({
+        where: { id },
+        data: {
+          name: name !== undefined ? name : undefined,
+          type: type !== undefined ? type : undefined,
+          initialBalance: initialBalance !== undefined ? Number(initialBalance) : undefined,
+          monthlyBudget: monthlyBudget !== undefined ? Number(monthlyBudget) : undefined,
+          dailyBudget: dailyBudget !== undefined ? Number(dailyBudget) : undefined,
+          currency: currency !== undefined ? currency : undefined,
+          color: color !== undefined ? color : undefined,
+          icon: icon !== undefined ? icon : undefined,
+          isDefault: isDefault !== undefined ? Boolean(isDefault) : undefined,
+        },
+      });
+
+      return NextResponse.json({ success: true, account }, { headers: corsHeaders });
+    }
+
+    if (action === "DELETE_ACCOUNT") {
+      const { id, userId } = payload;
+      await prisma.account.deleteMany({
+        where: { id, userId },
+      });
+
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
     if (action === "SAVE_EXPENSE") {
-      const { userId, date, spent, note, limit } = payload;
-      const settings = await prisma.settings.findUnique({ where: { userId } });
-      const dailyLimit = limit !== undefined ? Number(limit) : settings?.dailyBudget || 500;
+      const { userId, accountId, date, spent, note, limit } = payload;
+      const dailyLimit = limit !== undefined ? Number(limit) : 500;
       const numSpent = Number(spent) || 0;
       const saved = dailyLimit - numSpent;
 
       const expense = await prisma.expense.upsert({
         where: { userId_date: { userId, date } },
-        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit },
-        create: { userId, date, spent: numSpent, saved, note: note || "", limit: dailyLimit },
+        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit, accountId: accountId || undefined },
+        create: { userId, accountId: accountId || undefined, date, spent: numSpent, saved, note: note || "", limit: dailyLimit },
       });
 
       return NextResponse.json({ success: true, expense }, { headers: corsHeaders });
@@ -184,68 +244,21 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Generate or update month daily entries
-      const [year, month] = currentMonth.split("-").map(Number);
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const upsertPromises = [];
-
-      for (let day = 1; day <= daysInMonth; day++) {
-        const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        upsertPromises.push(
-          prisma.expense.upsert({
-            where: { userId_date: { userId, date } },
-            create: {
-              userId,
-              date,
-              limit: numDaily,
-              spent: 0,
-              saved: numDaily,
-              note: "",
-            },
-            update: {
-              limit: numDaily,
-            },
-          })
-        );
-      }
-
-      await prisma.$transaction(upsertPromises);
-
       return NextResponse.json({ success: true, settings }, { headers: corsHeaders });
     }
 
     if (action === "RESET_MONTH") {
-      const { userId, monthStr } = payload;
-      const settings = await prisma.settings.findUnique({ where: { userId } });
-      const dailyBudget = settings?.dailyBudget || 500;
-
+      const { userId, accountId, monthStr } = payload;
       const [year, month] = monthStr.split("-").map(Number);
       const daysInMonth = new Date(year, month, 0).getDate();
 
-      const entries = [];
-      for (let day = 1; day <= daysInMonth; day++) {
-        const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        entries.push({
+      await prisma.expense.deleteMany({
+        where: {
           userId,
-          date,
-          limit: dailyBudget,
-          spent: 0,
-          saved: dailyBudget,
-          note: "",
-        });
-      }
-
-      await prisma.$transaction([
-        prisma.expense.deleteMany({
-          where: {
-            userId,
-            date: { startsWith: monthStr },
-          },
-        }),
-        prisma.expense.createMany({
-          data: entries,
-        }),
-      ]);
+          accountId: accountId || null,
+          date: { startsWith: monthStr },
+        },
+      });
 
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }

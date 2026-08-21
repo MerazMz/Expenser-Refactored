@@ -23,9 +23,31 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   settings        Settings?
+  accounts        Account[]
   expenses        Expense[]
 
   @@map("users")
+}
+
+model Account {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String    // e.g. "Daily Food Expenses", "Daily Savings"
+  type           String    @default("budget") // "budget" (Fixed Daily Budget) or "flex" (Track As You Go)
+  initialBalance Float     @default(0)
+  monthlyBudget  Float     @default(0)
+  dailyBudget    Float     @default(0)
+  currency       String    @default("INR")
+  color          String    @default("#10b981")
+  icon           String    @default("wallet")
+  isDefault      Boolean   @default(false)
+  expenses       Expense[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("accounts")
 }
 
 model Settings {
@@ -47,6 +69,8 @@ model Expense {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
   date      String   // Format: YYYY-MM-DD
   limit     Float
   spent     Float    @default(0)
@@ -57,6 +81,7 @@ model Expense {
 
   @@unique([userId, date])
   @@index([userId, date])
+  @@index([userId, accountId])
   @@index([userId])
   @@map("expenses")
 }

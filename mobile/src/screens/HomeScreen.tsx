@@ -33,15 +33,40 @@ import {
 import { TodayCard } from "../components/TodayCard";
 import { SpendInput, evaluateSpendExpression } from "../components/SpendInput";
 import { MonthlySummaryCards } from "../components/MonthlySummaryCards";
+import { AccountSwitcherSheet } from "../components/AccountSwitcherSheet";
+import { CreateAccountModal } from "../components/CreateAccountModal";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useTabNavigation } from "../context/TabNavigationContext";
+import { useAccount } from "../context/AccountContext";
 import { syncDailyReminderStatus, addExpenseNotificationListener } from "../services/notificationService";
-import { X, Calculator, Sparkles, Check, Plus } from "lucide-react-native";
+import {
+  X,
+  Calculator,
+  Sparkles,
+  Check,
+  Plus,
+  ChevronDown,
+  Wallet,
+  Utensils,
+  ShoppingBag,
+  CreditCard,
+  TrendingUp,
+} from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+
+const ICON_MAP: Record<string, any> = {
+  wallet: Wallet,
+  utensils: Utensils,
+  "shopping-bag": ShoppingBag,
+  "credit-card": CreditCard,
+  sparkles: Sparkles,
+  "trending-up": TrendingUp,
+};
 
 export const HomeScreen: React.FC = () => {
   const { user, refreshSession } = useAuth();
   const { colors, isDark } = useAppTheme();
+  const { activeAccount, openSwitcher } = useAccount();
   const navigation = useNavigation<any>();
   const { goToTab } = useTabNavigation();
   const keyboardHeight = useKeyboardHeight();
@@ -70,29 +95,36 @@ export const HomeScreen: React.FC = () => {
     if (!user) return;
     const todayStr = format(new Date(), "yyyy-MM-dd");
     const currentMonthStr = format(new Date(), "yyyy-MM");
+    const accountId = activeAccount?.id;
+
     try {
       const [today, monthExpenses, settings, currentStreak] = await Promise.all([
-        getLocalExpenseByDate(user.uid, todayStr),
-        getLocalExpensesByMonth(user.uid, currentMonthStr),
+        getLocalExpenseByDate(user.uid, todayStr, accountId),
+        getLocalExpensesByMonth(user.uid, currentMonthStr, accountId),
         getLocalSettings(user.uid),
-        calculateStreakFromLocal(user.uid),
+        calculateStreakFromLocal(user.uid, accountId),
       ]);
 
-      const dailyLimit = settings?.dailyBudget || 500;
-      if (settings) {
-        setMonthlyBudget(settings.monthlyBudget);
-        setDailyBudget(settings.dailyBudget);
-        setCurrency(settings.currency === "USD" ? "$" : settings.currency === "EUR" ? "€" : "₹");
-      }
+      const effectiveDaily = activeAccount
+        ? activeAccount.type === "flex" ? 0 : activeAccount.dailyBudget
+        : settings?.dailyBudget || 500;
+      const effectiveMonthly = activeAccount
+        ? activeAccount.initialBalance || activeAccount.monthlyBudget
+        : settings?.monthlyBudget || 15000;
+      const effectiveCurrency = activeAccount?.currency || settings?.currency || "INR";
+
+      setMonthlyBudget(effectiveMonthly);
+      setDailyBudget(effectiveDaily);
+      setCurrency(effectiveCurrency === "USD" ? "$" : effectiveCurrency === "EUR" ? "€" : "₹");
 
       if (today) {
         setTodayExpense({
           spent: today.spent || 0,
           note: today.note || "",
-          limit: today.limit || dailyLimit,
+          limit: today.limit || effectiveDaily,
         });
       } else {
-        setTodayExpense({ spent: 0, note: "", limit: dailyLimit });
+        setTodayExpense({ spent: 0, note: "", limit: effectiveDaily });
       }
 
       // Calculate monthly summary
@@ -112,7 +144,7 @@ export const HomeScreen: React.FC = () => {
     } catch (e) {
       console.log("Error loading dashboard data:", e);
     }
-  }, [user]);
+  }, [user, activeAccount]);
 
   // Initial load and sync
   useEffect(() => {
@@ -182,7 +214,7 @@ export const HomeScreen: React.FC = () => {
     }
     const todayStr = format(new Date(), "yyyy-MM-dd");
     try {
-      await saveLocalExpense(user.uid, todayStr, spent, note, dailyBudget);
+      await saveLocalExpense(user.uid, todayStr, spent, note, dailyBudget, activeAccount?.id);
       await loadDashboardData();
       processOfflineSyncQueue();
       syncDailyReminderStatus(user.uid, user.displayName || user.email);
@@ -204,7 +236,7 @@ export const HomeScreen: React.FC = () => {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-      await saveLocalExpense(user.uid, todayStr, evaluatedSpent, modalNoteInput.trim(), dailyBudget);
+      await saveLocalExpense(user.uid, todayStr, evaluatedSpent, modalNoteInput.trim(), dailyBudget, activeAccount?.id);
       setIsAddExpenseModalOpen(false);
       setModalSpentInput("");
       setModalNoteInput("");
@@ -225,107 +257,149 @@ export const HomeScreen: React.FC = () => {
     setModalSpentInput(newVal.toString());
   };
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor="#10b981"
-          colors={["#10b981"]}
-        />
-      }
-    >
-      {/* Top Header */}
-      <View style={styles.headerRow}>
-        <View style={styles.logoRow}>
-          <Image
-            source={require("../../assets/logo.png")}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-          <Text
-            style={[
-              styles.brandTitle,
-              { color: isDark ? "#f4f4f5" : "#18181b" },
-            ]}
-          >
-            expenser
-          </Text>
-        </View>
+  const ActiveIcon = ICON_MAP[activeAccount?.icon || "wallet"] || Wallet;
+  const isFlexAccount = activeAccount?.type === "flex";
 
-        {/* Streak Flame Badge */}
-        {streak >= 0 && (
-          <TouchableOpacity
-            onPress={() => setIsStreakModalOpen(true)}
-            activeOpacity={0.8}
-            style={[
-              styles.streakBadge,
-              {
-                backgroundColor: isDark ? "rgba(24, 24, 27, 0.9)" : "rgba(255, 255, 255, 0.9)",
-                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-              },
-            ]}
-          >
+  return (
+    <>
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#10b981"
+            colors={["#10b981"]}
+          />
+        }
+      >
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View style={styles.logoRow}>
             <Image
-              source={require("../../assets/streak.gif")}
-              style={[
-                styles.streakGifSmall,
-                streak === 0 && { opacity: 0.5, tintColor: isDark ? "#a1a1aa" : "#71717a" },
-              ]}
+              source={require("../../assets/logo.png")}
+              style={styles.logoImage}
               resizeMode="contain"
             />
             <Text
               style={[
-                styles.streakText,
-                { color: isDark ? "#e4e4e7" : "#27272a" },
+                styles.brandTitle,
+                { color: isDark ? "#f4f4f5" : "#18181b" },
               ]}
             >
-              {streak}
+              expenser
             </Text>
+          </View>
+
+          {/* Center Account Switcher Pill */}
+          <TouchableOpacity
+            onPress={openSwitcher}
+            activeOpacity={0.75}
+            style={[
+              styles.accountPickerPill,
+              {
+                backgroundColor: isDark ? "rgba(24, 24, 27, 0.9)" : "rgba(255, 255, 255, 0.9)",
+                borderColor: activeAccount?.color ? `${activeAccount.color}60` : isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.accountPickerDot,
+                { backgroundColor: activeAccount?.color || "#10b981" },
+              ]}
+            >
+              <ActiveIcon size={11} color="#ffffff" />
+            </View>
+            <Text
+              style={[
+                styles.accountPickerName,
+                { color: isDark ? "#e4e4e7" : "#27272a" },
+              ]}
+              numberOfLines={1}
+            >
+              {activeAccount?.name || "Daily Savings"}
+            </Text>
+            <ChevronDown size={13} color={isDark ? "#a1a1aa" : "#71717a"} style={{ marginLeft: 3 }} />
           </TouchableOpacity>
-        )}
-      </View>
 
-      {/* Date Section */}
-      <View style={styles.dateSection}>
-        <Text
-          style={[
-            styles.dateSub,
-            { color: isDark ? "#a1a1aa" : "#71717a" },
-          ]}
-        >
-          Today
-        </Text>
-        <Text
-          style={[
-            styles.dateTitle,
-            { color: isDark ? "#f4f4f5" : "#18181b" },
-          ]}
-        >
-          {format(new Date(), "d MMM yyyy")}
-        </Text>
-      </View>
+          {/* Streak Flame Badge */}
+          {streak >= 0 && (
+            <TouchableOpacity
+              onPress={() => setIsStreakModalOpen(true)}
+              activeOpacity={0.8}
+              style={[
+                styles.streakBadge,
+                {
+                  backgroundColor: isDark ? "rgba(24, 24, 27, 0.9)" : "rgba(255, 255, 255, 0.9)",
+                  borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+                },
+              ]}
+            >
+              <Image
+                source={require("../../assets/streak.gif")}
+                style={[
+                  styles.streakGifSmall,
+                  streak === 0 && { opacity: 0.5, tintColor: isDark ? "#a1a1aa" : "#71717a" },
+                ]}
+                resizeMode="contain"
+              />
+              <Text
+                style={[
+                  styles.streakText,
+                  { color: isDark ? "#e4e4e7" : "#27272a" },
+                ]}
+              >
+                {streak}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-      {/* Content Stack */}
-      <View style={styles.stack}>
-        {/* Today Liquid Glass Card */}
-        <TodayCard
-          limit={todayExpense.limit || dailyBudget}
-          spent={todayExpense.spent}
-          currency={currency}
-        />
+        {/* Date Section */}
+        <View style={styles.dateSection}>
+          <Text
+            style={[
+              styles.dateSub,
+              { color: isDark ? "#a1a1aa" : "#71717a" },
+            ]}
+          >
+            Today
+          </Text>
+          <Text
+            style={[
+              styles.dateTitle,
+              { color: isDark ? "#f4f4f5" : "#18181b" },
+            ]}
+          >
+            {format(new Date(), "d MMM yyyy")}
+          </Text>
+        </View>
 
-        {/* Spend Input Box */}
-        <SpendInput
-          initialSpent={todayExpense.spent}
-          initialNote={todayExpense.note}
-          currency={currency}
-          onSave={handleSaveTodayExpense}
-        />
+        {/* Content Stack */}
+        <View style={styles.stack}>
+          {/* Today Liquid Glass Card */}
+          <TodayCard
+            limit={todayExpense.limit || dailyBudget}
+            spent={todayExpense.spent}
+            currency={currency}
+            accountType={activeAccount?.type || "budget"}
+            availableBalance={(activeAccount?.initialBalance || monthlyBudget) - monthTotalSpent}
+            initialBalance={activeAccount?.initialBalance || monthlyBudget}
+            monthSpent={monthTotalSpent}
+            accountName={activeAccount?.name}
+            accentColor={activeAccount?.color || "#10b981"}
+          />
+
+          {/* Spend Input Box */}
+          <SpendInput
+            initialSpent={todayExpense.spent}
+            initialNote={todayExpense.note}
+            currency={currency}
+            onSave={handleSaveTodayExpense}
+          />
 
         {/* Account Monthly Summary 2x2 Grid */}
         <MonthlySummaryCards
@@ -640,7 +714,14 @@ export const HomeScreen: React.FC = () => {
         </View>
       </Modal>
     </ScrollView>
-  );
+
+    {/* Multi-Account Switcher Bottom Sheet */}
+    <AccountSwitcherSheet />
+
+    {/* Create / Edit Account Modal */}
+    <CreateAccountModal />
+  </>
+);
 };
 
 const styles = StyleSheet.create({
@@ -672,6 +753,33 @@ const styles = StyleSheet.create({
     fontSize: 19,
     letterSpacing: -0.4,
     textTransform: "lowercase",
+  },
+  accountPickerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: 160,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  accountPickerDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+  },
+  accountPickerName: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11.5,
+    flexShrink: 1,
   },
   streakBadge: {
     flexDirection: "row",

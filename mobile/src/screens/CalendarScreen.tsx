@@ -35,10 +35,16 @@ import {
   ShieldCheck,
   X,
   Calculator,
+  ChevronDown,
+  Utensils,
+  ShoppingBag,
 } from "lucide-react-native";
 import { useAuth } from "../context/AuthContext";
 import { useAppTheme } from "../theme/ThemeContext";
+import { useAccount } from "../context/AccountContext";
 import { useKeyboardHeight } from "../hooks/useKeyboardHeight";
+import { AccountSwitcherSheet } from "../components/AccountSwitcherSheet";
+import { CreateAccountModal } from "../components/CreateAccountModal";
 import {
   getLocalExpensesByMonth,
   getLocalSettings,
@@ -51,11 +57,21 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { evaluateSpendExpression } from "../components/SpendInput";
 
+const ICON_MAP: Record<string, any> = {
+  wallet: Wallet,
+  utensils: Utensils,
+  "shopping-bag": ShoppingBag,
+  "credit-card": CreditCard,
+  sparkles: Sparkles,
+  "trending-up": TrendingUp,
+};
+
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export const CalendarScreen: React.FC = () => {
   const { user, refreshSession } = useAuth();
   const { colors, isDark } = useAppTheme();
+  const { activeAccount, openSwitcher } = useAccount();
   const keyboardHeight = useKeyboardHeight();
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -79,19 +95,25 @@ export const CalendarScreen: React.FC = () => {
 
   const loadMonthData = useCallback(async () => {
     if (!user) return;
+    const accountId = activeAccount?.id;
     try {
       const [list, settings, months] = await Promise.all([
-        getLocalExpensesByMonth(user.uid, monthStr),
+        getLocalExpensesByMonth(user.uid, monthStr, accountId),
         getLocalSettings(user.uid),
-        getUserAvailableMonthsFromLocal(user.uid),
+        getUserAvailableMonthsFromLocal(user.uid, accountId),
       ]);
 
-      const defaultLimit = settings?.dailyBudget || 500;
-      if (settings) {
-        setMonthlyBudget(settings.monthlyBudget);
-        setDailyBudget(settings.dailyBudget);
-        setCurrency(settings.currency === "USD" ? "$" : settings.currency === "EUR" ? "€" : "₹");
-      }
+      const effectiveDaily = activeAccount
+        ? activeAccount.type === "flex" ? 0 : activeAccount.dailyBudget
+        : settings?.dailyBudget || 500;
+      const effectiveMonthly = activeAccount
+        ? activeAccount.initialBalance || activeAccount.monthlyBudget
+        : settings?.monthlyBudget || 15000;
+      const effectiveCurrency = activeAccount?.currency || settings?.currency || "INR";
+
+      setMonthlyBudget(effectiveMonthly);
+      setDailyBudget(effectiveDaily);
+      setCurrency(effectiveCurrency === "USD" ? "$" : effectiveCurrency === "EUR" ? "€" : "₹");
 
       if (months) {
         setAvailableMonths(months);
@@ -102,10 +124,10 @@ export const CalendarScreen: React.FC = () => {
       } = {};
 
       list.forEach((item) => {
-        const itemLimit = item.limit || defaultLimit;
+        const itemLimit = item.limit || effectiveDaily;
         map[item.date] = {
           spent: item.spent,
-          saved: item.saved !== undefined ? item.saved : itemLimit - item.spent,
+          saved: item.saved !== undefined ? item.saved : itemLimit > 0 ? itemLimit - item.spent : 0,
           note: item.note || "",
           limit: itemLimit,
         };
@@ -114,7 +136,7 @@ export const CalendarScreen: React.FC = () => {
     } catch (e) {
       console.log("Error loading calendar:", e);
     }
-  }, [user, monthStr]);
+  }, [user, monthStr, activeAccount]);
 
   useEffect(() => {
     loadMonthData();
@@ -209,7 +231,7 @@ export const CalendarScreen: React.FC = () => {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      await saveLocalExpense(user.uid, dStr, isNaN(evaluatedSpent) ? 0 : evaluatedSpent, editNote.trim(), dailyBudget);
+      await saveLocalExpense(user.uid, dStr, isNaN(evaluatedSpent) ? 0 : evaluatedSpent, editNote.trim(), dailyBudget, activeAccount?.id);
       await loadMonthData();
       processOfflineSyncQueue();
       syncDailyReminderStatus(user.uid, user.displayName || user.email);
@@ -230,7 +252,7 @@ export const CalendarScreen: React.FC = () => {
     const dStr = format(selectedDate, "yyyy-MM-dd");
     setIsSaving(true);
     try {
-      await saveLocalExpense(user.uid, dStr, 0, "", dailyBudget);
+      await saveLocalExpense(user.uid, dStr, 0, "", dailyBudget, activeAccount?.id);
       await loadMonthData();
       processOfflineSyncQueue();
       syncDailyReminderStatus(user.uid, user.displayName || user.email);
@@ -243,60 +265,97 @@ export const CalendarScreen: React.FC = () => {
     }
   };
 
+  const ActiveIcon = ICON_MAP[activeAccount?.icon || "wallet"] || Wallet;
+
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Month Navigator Header with Centered Title & Chevrons */}
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={handlePrevMonth}
-          disabled={!canGoPrev}
-          style={[
-            styles.chevronBtn,
-            {
-              backgroundColor: colors.inputBg,
-              opacity: canGoPrev ? 1 : 0.3,
-            },
-          ]}
-          activeOpacity={0.7}
-        >
-          <ChevronLeft size={20} color={colors.text} strokeWidth={2.2} />
-        </TouchableOpacity>
-
-        <Text style={[styles.monthHeaderTitle, { color: colors.text }]}>
-          {format(currentDate, "MMMM yyyy")}
-        </Text>
-
-        <TouchableOpacity
-          onPress={handleNextMonth}
-          disabled={!canGoNext}
-          style={[
-            styles.chevronBtn,
-            {
-              backgroundColor: colors.inputBg,
-              opacity: canGoNext ? 1 : 0.3,
-            },
-          ]}
-          activeOpacity={0.7}
-        >
-          <ChevronRight size={20} color={colors.text} strokeWidth={2.2} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Weekdays Header */}
-      <View style={styles.calendarWrapper}>
-        <View style={styles.weekdaysRow}>
-          {WEEKDAYS.map((w) => (
-            <Text key={w} style={[styles.weekdayText, { color: colors.textMuted }]}>
-              {w}
+    <>
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Top Header with Account Picker */}
+        <View style={styles.topAccountRow}>
+          <TouchableOpacity
+            onPress={openSwitcher}
+            activeOpacity={0.75}
+            style={[
+              styles.accountPickerPill,
+              {
+                backgroundColor: isDark ? "rgba(24, 24, 27, 0.9)" : "rgba(255, 255, 255, 0.9)",
+                borderColor: activeAccount?.color ? `${activeAccount.color}60` : isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.accountPickerDot,
+                { backgroundColor: activeAccount?.color || "#10b981" },
+              ]}
+            >
+              <ActiveIcon size={11} color="#ffffff" />
+            </View>
+            <Text
+              style={[
+                styles.accountPickerName,
+                { color: isDark ? "#e4e4e7" : "#27272a" },
+              ]}
+              numberOfLines={1}
+            >
+              {activeAccount?.name || "Daily Savings"}
             </Text>
-          ))}
+            <ChevronDown size={13} color={isDark ? "#a1a1aa" : "#71717a"} style={{ marginLeft: 3 }} />
+          </TouchableOpacity>
         </View>
 
-        <View style={[styles.horizontalDivider, { backgroundColor: colors.cardBorder }]} />
+        {/* Month Navigator Header with Centered Title & Chevrons */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={handlePrevMonth}
+            disabled={!canGoPrev}
+            style={[
+              styles.chevronBtn,
+              {
+                backgroundColor: colors.inputBg,
+                opacity: canGoPrev ? 1 : 0.3,
+              },
+            ]}
+            activeOpacity={0.7}
+          >
+            <ChevronLeft size={20} color={colors.text} strokeWidth={2.2} />
+          </TouchableOpacity>
+
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {format(currentDate, "MMMM yyyy")}
+          </Text>
+
+          <TouchableOpacity
+            onPress={handleNextMonth}
+            disabled={!canGoNext}
+            style={[
+              styles.chevronBtn,
+              {
+                backgroundColor: colors.inputBg,
+                opacity: canGoNext ? 1 : 0.3,
+              },
+            ]}
+            activeOpacity={0.7}
+          >
+            <ChevronRight size={20} color={colors.text} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Weekdays Header */}
+        <View style={styles.calendarWrapper}>
+          <View style={styles.weekdaysRow}>
+            {WEEKDAYS.map((w) => (
+              <Text key={w} style={[styles.weekdayText, { color: colors.textMuted }]}>
+                {w}
+              </Text>
+            ))}
+          </View>
+
+          <View style={[styles.horizontalDivider, { backgroundColor: colors.cardBorder }]} />
 
         {/* Days Grid (Monday Start) */}
         <View style={styles.grid}>
@@ -715,7 +774,14 @@ export const CalendarScreen: React.FC = () => {
         </View>
       </Modal>
     </ScrollView>
-  );
+
+    {/* Multi-Account Switcher Bottom Sheet */}
+    <AccountSwitcherSheet />
+
+    {/* Create / Edit Account Modal */}
+    <CreateAccountModal />
+  </>
+);
 };
 
 const styles = StyleSheet.create({
@@ -726,6 +792,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: Platform.OS === "ios" ? 54 : 38,
     paddingBottom: 110,
+  },
+  topAccountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    marginBottom: 12,
+  },
+  accountPickerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  accountPickerDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+  },
+  accountPickerName: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11.5,
   },
   headerRow: {
     flexDirection: "row",
@@ -740,7 +837,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  monthHeaderTitle: {
+  headerTitle: {
     fontFamily: "Outfit_800ExtraBold",
     fontSize: 20,
     letterSpacing: -0.4,

@@ -8,6 +8,7 @@ export interface ApiResponse<T = any> {
   token?: string;
   isNewUser?: boolean;
   settings?: any;
+  accounts?: any[];
   expenses?: any[];
   streak?: number;
 }

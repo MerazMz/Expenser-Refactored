@@ -6,6 +6,7 @@ import {
   markExpenseSynced,
   markSettingsSynced,
   bulkUpsertExpensesFromServer,
+  bulkUpsertAccountsFromServer,
   upsertSettingsFromServer,
 } from "../db/sqlite";
 import { syncMutationWithServer, pullServerUserData } from "./api";
@@ -52,6 +53,9 @@ export async function pullLatestDataFromServer(
   try {
     const res = await pullServerUserData(userId);
     if (res && res.success) {
+      if (res.accounts && Array.isArray(res.accounts)) {
+        await bulkUpsertAccountsFromServer(userId, res.accounts);
+      }
       if (res.settings) {
         await upsertSettingsFromServer(userId, res.settings);
       }

@@ -35,7 +35,10 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { useAuth } from "../context/AuthContext";
 import { useAppTheme } from "../theme/ThemeContext";
+import { useAccount } from "../context/AccountContext";
 import { useKeyboardHeight } from "../hooks/useKeyboardHeight";
+import { AccountSwitcherSheet } from "../components/AccountSwitcherSheet";
+import { CreateAccountModal } from "../components/CreateAccountModal";
 import {
   getLocalSettings,
   saveLocalSettings,
@@ -53,10 +56,39 @@ import {
   syncDailyReminderStatus,
 } from "../services/notificationService";
 import { API_BASE_URL } from "../services/api";
+import {
+  Layers,
+  Plus,
+  Compass,
+  Target,
+  Edit2,
+  Wallet,
+  Utensils,
+  ShoppingBag,
+  CreditCard,
+  Sparkles,
+  TrendingUp,
+} from "lucide-react-native";
+
+const ICON_MAP: Record<string, any> = {
+  wallet: Wallet,
+  utensils: Utensils,
+  "shopping-bag": ShoppingBag,
+  "credit-card": CreditCard,
+  sparkles: Sparkles,
+  "trending-up": TrendingUp,
+};
 
 export const SettingsScreen: React.FC = () => {
   const { user, logout } = useAuth();
   const { mode, isDark, colors, setThemeMode } = useAppTheme();
+  const {
+    accounts,
+    activeAccount,
+    openSwitcher,
+    openCreateModal,
+    openEditModal,
+  } = useAccount();
   const keyboardHeight = useKeyboardHeight();
 
   const [monthlyBudget, setMonthlyBudget] = useState(15000);
@@ -100,12 +132,16 @@ export const SettingsScreen: React.FC = () => {
     try {
       const [data, months, reminderVal, timeVal] = await Promise.all([
         getLocalSettings(user.uid),
-        getUserAvailableMonthsFromLocal(user.uid),
+        getUserAvailableMonthsFromLocal(user.uid, activeAccount?.id),
         isDailyReminderEnabled(),
         getReminderTime(),
       ]);
 
-      if (data) {
+      if (activeAccount) {
+        setMonthlyBudget(activeAccount.initialBalance || activeAccount.monthlyBudget);
+        setDailyBudget(activeAccount.dailyBudget);
+        setCurrency(activeAccount.currency || "INR");
+      } else if (data) {
         setMonthlyBudget(data.monthlyBudget);
         setDailyBudget(data.dailyBudget);
         setCurrency(data.currency || "INR");
@@ -117,15 +153,13 @@ export const SettingsScreen: React.FC = () => {
       const h = timeVal.hour % 12 === 0 ? 12 : timeVal.hour % 12;
       setSelectedHour(h);
       setSelectedMinute(timeVal.minute);
-      setSelectedPeriod(timeVal.hour >= 12 ? "PM" : "AM");
-
       if (months.length > 0) {
         setSelectedExportMonth(months[0]);
       }
     } catch (e) {
       console.log("Error loading settings:", e);
     }
-  }, [user]);
+  }, [user, activeAccount]);
 
   const handleToggleReminder = async (value: boolean) => {
     setDailyReminder(value);
@@ -354,6 +388,78 @@ export const SettingsScreen: React.FC = () => {
         >
           <LogOut size={17} color={colors.textMuted} />
         </TouchableOpacity>
+      </View>
+
+      {/* Accounts & Ledgers Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Accounts & Ledgers</Text>
+          <TouchableOpacity
+            onPress={openCreateModal}
+            style={styles.addAccountHeaderBtn}
+            activeOpacity={0.7}
+          >
+            <Plus size={13} color="#10b981" style={{ marginRight: 3 }} />
+            <Text style={styles.addAccountHeaderText}>New</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View
+          style={[
+            styles.sectionCard,
+            { backgroundColor: colors.card, borderColor: colors.cardBorder },
+          ]}
+        >
+          {/* Active Account Row */}
+          <TouchableOpacity
+            onPress={openSwitcher}
+            activeOpacity={0.7}
+            style={styles.settingRow}
+          >
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 3 }}>
+                <View
+                  style={[
+                    styles.accountSwatchSmall,
+                    { backgroundColor: activeAccount?.color || "#10b981" },
+                  ]}
+                />
+                <Text style={[styles.settingLabel, { color: colors.text }]} numberOfLines={1}>
+                  {activeAccount?.name || "Daily Savings"}
+                </Text>
+              </View>
+              <Text style={[styles.settingSub, { color: colors.textMuted }]}>
+                {activeAccount?.type === "flex"
+                  ? `Track As You Go • Balance: ₹${(activeAccount?.initialBalance || 0).toLocaleString()}`
+                  : `Fixed Budget • ₹${activeAccount?.dailyBudget || 500}/day`}
+              </Text>
+            </View>
+
+            <View style={styles.valWithIcon}>
+              <Text style={styles.accountActionText}>Switch</Text>
+              <ChevronRight size={15} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+
+          <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+
+          {/* Edit Current Account Details */}
+          <TouchableOpacity
+            onPress={() => activeAccount && openEditModal(activeAccount)}
+            activeOpacity={0.7}
+            style={styles.settingRow}
+          >
+            <View>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Edit Active Account</Text>
+              <Text style={[styles.settingSub, { color: colors.textMuted }]}>
+                Name, tracking mode, budget & color
+              </Text>
+            </View>
+            <View style={[styles.pencilBox, { backgroundColor: colors.inputBg }]}>
+              <Edit2 size={12} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Budgeting Section */}
@@ -1103,6 +1209,12 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Multi-Account Switcher Bottom Sheet */}
+      <AccountSwitcherSheet />
+
+      {/* Create / Edit Account Modal */}
+      <CreateAccountModal />
     </ScrollView>
   );
 };
@@ -1115,6 +1227,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: Platform.OS === "ios" ? 54 : 38,
     paddingBottom: 110,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  addAccountHeaderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  addAccountHeaderText: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 11.5,
+    color: "#10b981",
+  },
+  accountSwatchSmall: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 7,
+  },
+  accountActionText: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 12.5,
+    color: "#10b981",
+    marginRight: 4,
   },
   header: {
     marginBottom: 14,

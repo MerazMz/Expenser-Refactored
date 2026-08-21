@@ -19,6 +19,7 @@ import {
 } from "@expo-google-fonts/outfit";
 import { ThemeProvider, useAppTheme } from "./src/theme/ThemeContext";
 import { AuthProvider } from "./src/context/AuthContext";
+import { AccountProvider } from "./src/context/AccountContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { initializeAutoSync } from "./src/services/syncManager";
 import { getDatabase } from "./src/db/sqlite";
@@ -65,7 +66,9 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <MainApp />
+          <AccountProvider>
+            <MainApp />
+          </AccountProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

@@ -25,6 +25,7 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "../context/AuthContext";
 import { useAppTheme } from "../theme/ThemeContext";
+import { useAccount } from "../context/AccountContext";
 import {
   getLocalExpensesByMonth,
   getLocalSettings,
@@ -37,6 +38,7 @@ import { SavingsLineChart } from "../components/SavingsLineChart";
 export const InsightsScreen: React.FC = () => {
   const { user } = useAuth();
   const { colors, isDark } = useAppTheme();
+  const { activeAccount } = useAccount();
 
   const now = new Date();
   const [selectedDate, setSelectedDate] = useState(now);
@@ -50,22 +52,22 @@ export const InsightsScreen: React.FC = () => {
 
   const loadData = useCallback(async () => {
     if (!user) return;
+    const accountId = activeAccount?.id;
     try {
       const [list, set, months] = await Promise.all([
-        getLocalExpensesByMonth(user.uid, selectedMonthStr),
+        getLocalExpensesByMonth(user.uid, selectedMonthStr, accountId),
         getLocalSettings(user.uid),
-        getUserAvailableMonthsFromLocal(user.uid),
+        getUserAvailableMonthsFromLocal(user.uid, accountId),
       ]);
       setExpenses(list);
       setSettings(set);
       setAvailableMonths(months);
-      if (set) {
-        setCurrency(set.currency === "USD" ? "$" : set.currency === "EUR" ? "€" : "₹");
-      }
+      const effectiveCurrency = activeAccount?.currency || set?.currency || "INR";
+      setCurrency(effectiveCurrency === "USD" ? "$" : effectiveCurrency === "EUR" ? "€" : "₹");
     } catch (e) {
       console.log("Error loading insights:", e);
     }
-  }, [user, selectedMonthStr]);
+  }, [user, selectedMonthStr, activeAccount]);
 
   useEffect(() => {
     loadData();

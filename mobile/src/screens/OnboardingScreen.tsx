@@ -13,7 +13,7 @@ import {
 import { ArrowRight, Check } from "lucide-react-native";
 import { useAuth } from "../context/AuthContext";
 import { useAppTheme } from "../theme/ThemeContext";
-import { saveLocalSettings } from "../db/sqlite";
+import { saveLocalSettings, saveLocalAccount } from "../db/sqlite";
 import { processOfflineSyncQueue } from "../services/syncManager";
 import * as Haptics from "expo-haptics";
 
@@ -56,6 +56,18 @@ export const OnboardingScreen: React.FC = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       await saveLocalSettings(user.uid, mNum, dNum, "INR", isDark ? "dark" : "light");
+      await saveLocalAccount({
+        userId: user.uid,
+        name: "Daily Savings",
+        type: "budget",
+        initialBalance: mNum,
+        monthlyBudget: mNum,
+        dailyBudget: dNum,
+        currency: "INR",
+        color: "#10b981",
+        icon: "wallet",
+        isDefault: 1,
+      });
       processOfflineSyncQueue();
       setIsOnboarded(true);
     } finally {

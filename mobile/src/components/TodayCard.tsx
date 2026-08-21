@@ -8,7 +8,7 @@ import Svg, {
   Stop,
   Rect,
 } from "react-native-svg";
-import { Sparkles, Wallet, TrendingDown, TrendingUp } from "lucide-react-native";
+import { Sparkles, Wallet, TrendingDown, TrendingUp, Compass } from "lucide-react-native";
 import { useAppTheme } from "../theme/ThemeContext";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -17,18 +17,44 @@ interface TodayCardProps {
   limit: number;
   spent: number;
   currency?: string;
+  accountType?: "budget" | "flex";
+  availableBalance?: number;
+  initialBalance?: number;
+  monthSpent?: number;
+  accountName?: string;
+  accentColor?: string;
 }
 
-export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "₹" }) => {
+export const TodayCard: React.FC<TodayCardProps> = ({
+  limit,
+  spent,
+  currency = "₹",
+  accountType = "budget",
+  availableBalance = 0,
+  initialBalance = 0,
+  monthSpent = 0,
+  accountName,
+  accentColor = "#10b981",
+}) => {
   const { isDark } = useAppTheme();
 
+  const isFlex = accountType === "flex";
+
+  // Calculations for Fixed Budget mode
   const displaySaved = Math.max(0, limit - spent);
   const percentageSaved =
     limit > 0 ? Math.max(0, Math.min(100, Math.round((displaySaved / limit) * 100))) : 100;
   const isBudgetExceeded = spent > limit;
   const overAmount = spent - limit;
 
-  // SVG circular gauge calculations (spacious & bold)
+  // Calculations for Flex / Track As You Go mode
+  const flexBalance = Math.max(0, availableBalance);
+  const flexSpentPercent =
+    initialBalance > 0
+      ? Math.min(100, Math.round((monthSpent / initialBalance) * 100))
+      : 0;
+
+  // SVG circular gauge calculations
   const size = 88;
   const strokeWidth = 7;
   const center = size / 2;
@@ -38,9 +64,10 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
   const animatedOffset = useRef(new Animated.Value(circumference)).current;
 
   useEffect(() => {
-    const targetOffset = isBudgetExceeded
+    const targetPercent = isFlex ? 100 - flexSpentPercent : percentageSaved;
+    const targetOffset = !isFlex && isBudgetExceeded
       ? 0
-      : circumference - (circumference * percentageSaved) / 100;
+      : circumference - (circumference * Math.max(0, targetPercent)) / 100;
 
     Animated.timing(animatedOffset, {
       toValue: targetOffset,
@@ -48,7 +75,7 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [percentageSaved, isBudgetExceeded, circumference]);
+  }, [percentageSaved, flexSpentPercent, isBudgetExceeded, isFlex, circumference]);
 
   return (
     <View
@@ -64,17 +91,17 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
       <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
         <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
           <Defs>
-            {/* Top-Left Subtle Emerald Glow */}
+            {/* Top-Left Subtle Glow matching accent color */}
             <RadialGradient id="liquidTopLeft" cx="10%" cy="10%" rx="80%" ry="80%">
-              <Stop offset="0%" stopColor="#059669" stopOpacity="0.18" />
-              <Stop offset="40%" stopColor="#10b981" stopOpacity="0.05" />
+              <Stop offset="0%" stopColor={accentColor} stopOpacity="0.18" />
+              <Stop offset="40%" stopColor={accentColor} stopOpacity="0.05" />
               <Stop offset="80%" stopColor="#000000" stopOpacity="0" />
             </RadialGradient>
 
-            {/* Bottom-Right Subtle Teal Glow */}
+            {/* Bottom-Right Subtle Glow */}
             <RadialGradient id="liquidBottom" cx="90%" cy="90%" rx="80%" ry="80%">
-              <Stop offset="0%" stopColor="#0d9488" stopOpacity="0.15" />
-              <Stop offset="40%" stopColor="#059669" stopOpacity="0.04" />
+              <Stop offset="0%" stopColor={isFlex ? "#3b82f6" : "#0d9488"} stopOpacity="0.15" />
+              <Stop offset="40%" stopColor={accentColor} stopOpacity="0.04" />
               <Stop offset="80%" stopColor="#000000" stopOpacity="0" />
             </RadialGradient>
           </Defs>
@@ -88,42 +115,73 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
       <View style={styles.contentRow}>
         {/* Left Column: Financial Data */}
         <View style={styles.leftColumn}>
-          {/* Savings Today Header Badge */}
+          {/* Header Badge */}
           <View style={styles.savingsBadgeRow}>
-            <Sparkles size={12} color="#34d399" />
-            <Text style={styles.savingsLabel}>SAVINGS TODAY</Text>
+            {isFlex ? (
+              <Compass size={12} color={accentColor} />
+            ) : (
+              <Sparkles size={12} color="#34d399" />
+            )}
+            <Text
+              style={[
+                styles.savingsLabel,
+                { color: isFlex ? accentColor : "#a1a1aa" },
+              ]}
+            >
+              {isFlex ? "AVAILABLE BALANCE" : "SAVINGS TODAY"}
+            </Text>
           </View>
 
           {/* Main Amount */}
           <Text style={styles.savingsAmount}>
-            {currency}{displaySaved.toLocaleString()}
+            {currency}
+            {isFlex
+              ? flexBalance.toLocaleString()
+              : displaySaved.toLocaleString()}
           </Text>
 
-          {/* Daily Budget Info */}
-          <View style={styles.budgetRow}>
-            <View style={styles.walletBox}>
-              <Wallet size={12} color="#a1a1aa" />
+          {/* Secondary Info */}
+          {isFlex ? (
+            <View style={styles.budgetRow}>
+              <View style={styles.walletBox}>
+                <Wallet size={12} color="#a1a1aa" />
+              </View>
+              <Text style={styles.budgetText}>
+                Initial: <Text style={styles.budgetBold}>{currency}{initialBalance.toLocaleString()}</Text>
+              </Text>
             </View>
-            <Text style={styles.budgetText}>
-              Daily Budget: <Text style={styles.budgetBold}>{currency}{limit.toLocaleString()}</Text>
-            </Text>
-          </View>
+          ) : (
+            <View style={styles.budgetRow}>
+              <View style={styles.walletBox}>
+                <Wallet size={12} color="#a1a1aa" />
+              </View>
+              <Text style={styles.budgetText}>
+                Daily Budget: <Text style={styles.budgetBold}>{currency}{limit.toLocaleString()}</Text>
+              </Text>
+            </View>
+          )}
 
           {/* Status Pill */}
           <View
             style={[
               styles.statusPill,
               {
-                backgroundColor: isBudgetExceeded
+                backgroundColor: isFlex
+                  ? "rgba(59, 130, 246, 0.15)"
+                  : isBudgetExceeded
                   ? "rgba(225, 29, 72, 0.15)"
                   : "rgba(16, 185, 129, 0.15)",
-                borderColor: isBudgetExceeded
+                borderColor: isFlex
+                  ? "rgba(59, 130, 246, 0.3)"
+                  : isBudgetExceeded
                   ? "rgba(225, 29, 72, 0.3)"
                   : "rgba(16, 185, 129, 0.3)",
               },
             ]}
           >
-            {isBudgetExceeded ? (
+            {isFlex ? (
+              <TrendingUp size={12} color="#60a5fa" style={{ marginRight: 5 }} />
+            ) : isBudgetExceeded ? (
               <TrendingDown size={12} color="#f43f5e" style={{ marginRight: 5 }} />
             ) : (
               <TrendingUp size={12} color="#34d399" style={{ marginRight: 5 }} />
@@ -131,10 +189,18 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
             <Text
               style={[
                 styles.statusText,
-                { color: isBudgetExceeded ? "#fb7185" : "#34d399" },
+                {
+                  color: isFlex
+                    ? "#93c5fd"
+                    : isBudgetExceeded
+                    ? "#fb7185"
+                    : "#34d399",
+                },
               ]}
             >
-              {isBudgetExceeded
+              {isFlex
+                ? "Track As You Go • No daily limits"
+                : isBudgetExceeded
                 ? `Over budget by ${currency}${overAmount.toLocaleString()}`
                 : `${percentageSaved}% budget saved`}
             </Text>
@@ -147,8 +213,8 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
             <Svg width={size} height={size} style={{ transform: [{ rotate: "-90deg" }] }}>
               <Defs>
                 <LinearGradient id="liquidEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <Stop offset="0%" stopColor="#10b981" />
-                  <Stop offset="100%" stopColor="#059669" />
+                  <Stop offset="0%" stopColor={accentColor} />
+                  <Stop offset="100%" stopColor={isFlex ? "#3b82f6" : "#059669"} />
                 </LinearGradient>
               </Defs>
 
@@ -165,7 +231,7 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
                 cx={center}
                 cy={center}
                 r={radius}
-                stroke={isBudgetExceeded ? "#f43f5e" : "url(#liquidEmerald)"}
+                stroke={!isFlex && isBudgetExceeded ? "#f43f5e" : "url(#liquidEmerald)"}
                 strokeWidth={strokeWidth}
                 strokeDasharray={circumference}
                 strokeDashoffset={animatedOffset}
@@ -176,9 +242,11 @@ export const TodayCard: React.FC<TodayCardProps> = ({ limit, spent, currency = "
 
             <View style={styles.gaugeTextOverlay}>
               <Text style={styles.gaugePercentText}>
-                {percentageSaved}%
+                {isFlex ? `${Math.max(0, 100 - flexSpentPercent)}%` : `${percentageSaved}%`}
               </Text>
-              <Text style={styles.gaugeSubText}>SAVED</Text>
+              <Text style={styles.gaugeSubText}>
+                {isFlex ? "LEFT" : "SAVED"}
+              </Text>
             </View>
           </View>
 
@@ -227,7 +295,6 @@ const styles = StyleSheet.create({
   savingsLabel: {
     fontFamily: "Outfit_700Bold",
     fontSize: 9.5,
-    color: "#a1a1aa",
     letterSpacing: 1.2,
     marginLeft: 5,
     textTransform: "uppercase",
