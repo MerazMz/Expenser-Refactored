@@ -631,13 +631,12 @@ export const CalendarScreen: React.FC = () => {
                           style={[styles.sheetNumericInput, { color: colors.text }]}
                           placeholder="0"
                           placeholderTextColor={colors.textSubtle}
-                          keyboardType="decimal-pad"
-                          inputMode="decimal"
+                          keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
                           autoCapitalize="none"
                           autoCorrect={false}
                           value={editSpent}
                           onChangeText={(val) => {
-                            const sanitized = val.replace(/[^0-9.+/*-]/g, "");
+                            const sanitized = val.replace(/[^0-9.+/*,\s-]/g, "");
                             setEditSpent(sanitized);
                           }}
                         />

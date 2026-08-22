@@ -56,199 +56,217 @@ export const MonthlySummaryCards: React.FC<MonthlySummaryCardsProps> = ({
 
       {/* 2x2 Grid */}
       <View style={styles.grid}>
-        {/* Current Balance (with tap-to-edit pencil icon) */}
-        <TouchableOpacity
-          onPress={onEditBalance}
-          disabled={!onEditBalance}
-          activeOpacity={0.75}
-          style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
-          <View
+        {/* Row 1: Balance & Spent */}
+        <View style={styles.row}>
+          {/* Current Balance (with tap-to-edit pencil icon) */}
+          <TouchableOpacity
+            onPress={onEditBalance}
+            disabled={!onEditBalance}
+            activeOpacity={0.75}
             style={[
-              styles.iconBox,
+              styles.card,
               {
-                backgroundColor: isDark
-                  ? "rgba(6, 78, 59, 0.4)"
-                  : "#e8f6ed",
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
               },
             ]}
           >
-            <Wallet
-              size={20}
-              color={isDark ? "#34d399" : "#15803d"}
-              strokeWidth={1.8}
-            />
-          </View>
-          <View style={styles.cardTextCol}>
-            <View style={styles.cardLabelRow}>
+            <View
+              style={[
+                styles.iconBox,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(6, 78, 59, 0.4)"
+                    : "#e8f6ed",
+                },
+              ]}
+            >
+              <Wallet
+                size={18}
+                color={isDark ? "#34d399" : "#15803d"}
+                strokeWidth={1.8}
+              />
+            </View>
+            <View style={styles.cardTextCol}>
+              <View style={styles.cardLabelRow}>
+                <Text
+                  style={[
+                    styles.cardLabel,
+                    { color: isDark ? "#a1a1aa" : "#71717a" },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Balance
+                </Text>
+                {onEditBalance && (
+                  <Pencil
+                    size={10}
+                    color={isDark ? "#34d399" : "#15803d"}
+                    style={{ marginLeft: 3 }}
+                  />
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.cardValue,
+                  { color: isDark ? "#f4f4f5" : "#18181b" },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {currency}{monthlyBudget.toLocaleString()}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Spent */}
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.iconBox,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(76, 5, 25, 0.45)"
+                    : "#fdeeee",
+                },
+              ]}
+            >
+              <TrendingUp
+                size={18}
+                color={isDark ? "#fb7185" : "#e11d48"}
+                strokeWidth={1.8}
+              />
+            </View>
+            <View style={styles.cardTextCol}>
               <Text
                 style={[
                   styles.cardLabel,
                   { color: isDark ? "#a1a1aa" : "#71717a" },
                 ]}
+                numberOfLines={1}
               >
-                Current Balance
+                Spent
               </Text>
-              {onEditBalance && (
-                <Pencil
-                  size={10.5}
-                  color={isDark ? "#34d399" : "#15803d"}
-                  style={{ marginLeft: 4 }}
-                />
-              )}
+              <Text
+                style={[
+                  styles.cardValue,
+                  { color: isDark ? "#f4f4f5" : "#18181b" },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {currency}{totalSpent.toLocaleString()}
+              </Text>
             </View>
-            <Text
-              style={[
-                styles.cardValue,
-                { color: isDark ? "#f4f4f5" : "#18181b" },
-              ]}
-            >
-              {currency}{monthlyBudget.toLocaleString()}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Spent */}
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.iconBox,
-              {
-                backgroundColor: isDark
-                  ? "rgba(76, 5, 25, 0.45)"
-                  : "#fdeeee",
-              },
-            ]}
-          >
-            <TrendingUp
-              size={20}
-              color={isDark ? "#fb7185" : "#e11d48"}
-              strokeWidth={1.8}
-            />
-          </View>
-          <View style={styles.cardTextCol}>
-            <Text
-              style={[
-                styles.cardLabel,
-                { color: isDark ? "#a1a1aa" : "#71717a" },
-              ]}
-            >
-              Spent
-            </Text>
-            <Text
-              style={[
-                styles.cardValue,
-                { color: isDark ? "#f4f4f5" : "#18181b" },
-              ]}
-            >
-              {currency}{totalSpent.toLocaleString()}
-            </Text>
           </View>
         </View>
 
-        {/* Saved */}
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
+        {/* Row 2: Saved & Remaining */}
+        <View style={styles.row}>
+          {/* Saved */}
           <View
             style={[
-              styles.iconBox,
+              styles.card,
               {
-                backgroundColor: isDark
-                  ? "rgba(6, 78, 59, 0.4)"
-                  : "#e8f6ed",
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
               },
             ]}
           >
-            <Sparkles
-              size={20}
-              color={isDark ? "#34d399" : "#15803d"}
-              strokeWidth={1.8}
-            />
-          </View>
-          <View style={styles.cardTextCol}>
-            <Text
+            <View
               style={[
-                styles.cardLabel,
-                { color: isDark ? "#a1a1aa" : "#71717a" },
+                styles.iconBox,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(6, 78, 59, 0.4)"
+                    : "#e8f6ed",
+                },
               ]}
             >
-              Saved
-            </Text>
-            <Text
-              style={[
-                styles.cardValue,
-                { color: isDark ? "#f4f4f5" : "#18181b" },
-              ]}
-            >
-              {currency}{totalSaved.toLocaleString()}
-            </Text>
+              <Sparkles
+                size={18}
+                color={isDark ? "#34d399" : "#15803d"}
+                strokeWidth={1.8}
+              />
+            </View>
+            <View style={styles.cardTextCol}>
+              <Text
+                style={[
+                  styles.cardLabel,
+                  { color: isDark ? "#a1a1aa" : "#71717a" },
+                ]}
+                numberOfLines={1}
+              >
+                Saved
+              </Text>
+              <Text
+                style={[
+                  styles.cardValue,
+                  { color: isDark ? "#34d399" : "#15803d" },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {currency}{totalSaved.toLocaleString()}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        {/* Remaining */}
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
+          {/* Remaining */}
           <View
             style={[
-              styles.iconBox,
+              styles.card,
               {
-                backgroundColor: isDark
-                  ? "rgba(69, 26, 3, 0.45)"
-                  : "#fdf2e2",
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
               },
             ]}
           >
-            <ShieldCheck
-              size={20}
-              color={isDark ? "#fbbf24" : "#d97706"}
-              strokeWidth={1.8}
-            />
-          </View>
-          <View style={styles.cardTextCol}>
-            <Text
+            <View
               style={[
-                styles.cardLabel,
-                { color: isDark ? "#a1a1aa" : "#71717a" },
+                styles.iconBox,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(69, 26, 3, 0.45)"
+                    : "#fdf2e2",
+                },
               ]}
             >
-              Remaining
-            </Text>
-            <Text
-              style={[
-                styles.cardValue,
-                { color: isDark ? "#f4f4f5" : "#18181b" },
-              ]}
-            >
-              {currency}{remaining.toLocaleString()}
-            </Text>
+              <ShieldCheck
+                size={18}
+                color={isDark ? "#fbbf24" : "#d97706"}
+                strokeWidth={1.8}
+              />
+            </View>
+            <View style={styles.cardTextCol}>
+              <Text
+                style={[
+                  styles.cardLabel,
+                  { color: isDark ? "#a1a1aa" : "#71717a" },
+                ]}
+                numberOfLines={1}
+              >
+                Remaining
+              </Text>
+              <Text
+                style={[
+                  styles.cardValue,
+                  { color: isDark ? "#f4f4f5" : "#18181b" },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {currency}{remaining.toLocaleString()}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -281,31 +299,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   grid: {
+    gap: 10,
+  },
+  row: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
+    alignItems: "stretch",
     gap: 10,
   },
   card: {
-    width: "48.2%",
-    borderRadius: 18,
+    flex: 1,
+    borderRadius: 16,
     borderWidth: 1,
-    padding: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     elevation: 2,
   },
   iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
+    marginRight: 8,
   },
   cardTextCol: {
     flex: 1,
@@ -321,7 +342,7 @@ const styles = StyleSheet.create({
   },
   cardValue: {
     fontFamily: "Outfit_800ExtraBold",
-    fontSize: 16,
+    fontSize: 15,
     letterSpacing: -0.3,
   },
 });

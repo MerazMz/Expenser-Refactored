@@ -24,7 +24,7 @@ export function evaluateSpendExpression(input: string): { value: number; isExpre
 
   const raw = input.trim();
   const hasOperators = /[+\-*/]/.test(raw);
-  const hasSeparators = /[,\s]+/.test(raw);
+  const hasSeparators = /[,\s]/.test(raw);
 
   if (!hasOperators && !hasSeparators) {
     const num = parseFloat(raw);
@@ -32,15 +32,17 @@ export function evaluateSpendExpression(input: string): { value: number; isExpre
   }
 
   try {
-    // If separated by spaces or commas without operators (e.g. "50 20 15" or "50, 20, 15")
-    if (!hasOperators && hasSeparators) {
-      const parts = raw.split(/[,\s]+/).map((p) => parseFloat(p)).filter((n) => !isNaN(n));
-      const sum = parts.reduce((acc, curr) => acc + curr, 0);
-      return { value: sum, isExpression: parts.length > 1 };
-    }
+    // Replace commas with +
+    let expr = raw
+      .replace(/,/g, " + ")
+      .replace(/\s+/g, " ")
+      .trim();
 
-    // Replace invalid characters except arithmetic
-    const sanitized = raw.replace(/[^0-9+\-*/.]/g, "");
+    // Replace numbers separated by spaces (e.g. "50 20") with +
+    expr = expr.replace(/(\d+(\.\d+)?)\s+(\d+(\.\d+)?)/g, "$1 + $3");
+
+    // Replace any remaining invalid characters except arithmetic
+    const sanitized = expr.replace(/[^0-9+\-*/.]/g, "");
     if (/^[0-9+\-*/.\s]+$/.test(sanitized)) {
       const cleanExpr = sanitized.replace(/[+\-*/.]+$/, "");
       if (cleanExpr) {
@@ -54,7 +56,7 @@ export function evaluateSpendExpression(input: string): { value: number; isExpre
     // ignore partial syntax errors while typing
   }
 
-  const fallback = parseFloat(raw);
+  const fallback = parseFloat(raw.replace(/,/g, ""));
   return { value: isNaN(fallback) ? 0 : fallback, isExpression: false };
 }
 
@@ -193,13 +195,12 @@ export const SpendInput: React.FC<SpendInputProps> = ({
           ]}
           placeholder="0"
           placeholderTextColor={isDark ? "#52525b" : "#a1a1aa"}
-          keyboardType="decimal-pad"
-          inputMode="decimal"
+          keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
           autoCapitalize="none"
           autoCorrect={false}
           value={spent}
           onChangeText={(val) => {
-            const sanitized = val.replace(/[^0-9.+/*-]/g, "");
+            const sanitized = val.replace(/[^0-9.+/*,\s-]/g, "");
             setSpent(sanitized);
             setIsSaved(false);
           }}

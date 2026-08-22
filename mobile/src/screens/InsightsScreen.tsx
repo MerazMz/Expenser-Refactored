@@ -270,227 +270,249 @@ export const InsightsScreen: React.FC = () => {
         </View>
       </View>
 
-        {/* 2x2 Metric Cards Grid */}
-        <View style={styles.metricsGrid}>
-        {/* Avg Spend / Day */}
-        <View
-          style={[
-            styles.metricCard,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
-          <View style={styles.metricHeader}>
+      {/* 2x2 Metric Cards Grid */}
+      <View style={styles.metricsGrid}>
+        {/* Row 1: Avg Spend & Projected End */}
+        <View style={styles.metricsRow}>
+          {/* Avg Spend / Day */}
+          <View
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+              },
+            ]}
+          >
+            <View style={styles.metricHeader}>
+              <Text
+                style={[
+                  styles.metricLabel,
+                  { color: isDark ? "#a1a1aa" : "#71717a" },
+                ]}
+                numberOfLines={1}
+              >
+                Avg. Spend / Day
+              </Text>
+              <View
+                style={[
+                  styles.metricIcon,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(5, 46, 22, 0.5)"
+                      : "#e8f6ed",
+                  },
+                ]}
+              >
+                <TrendingUp
+                  size={15}
+                  color={isDark ? "#34d399" : "#15803d"}
+                />
+              </View>
+            </View>
             <Text
               style={[
-                styles.metricLabel,
-                { color: isDark ? "#a1a1aa" : "#71717a" },
+                styles.metricVal,
+                { color: isDark ? "#f4f4f5" : "#18181b" },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
-              Avg. Spend / Day
+              {currency}
+              {metrics.avgSpend.toLocaleString()}
             </Text>
-            <View
+            <Text
               style={[
-                styles.metricIcon,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(5, 46, 22, 0.5)"
-                    : "#e8f6ed",
-                },
+                styles.metricHint,
+                { color: isDark ? "#71717a" : "#a1a1aa" },
               ]}
+              numberOfLines={1}
             >
-              <TrendingUp
-                size={16}
-                color={isDark ? "#34d399" : "#15803d"}
-              />
-            </View>
+              Per recorded day
+            </Text>
           </View>
-          <Text
+
+          {/* Projected End */}
+          <View
             style={[
-              styles.metricVal,
-              { color: isDark ? "#f4f4f5" : "#18181b" },
+              styles.metricCard,
+              {
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+              },
             ]}
           >
-            {currency}
-            {metrics.avgSpend.toLocaleString()}
-          </Text>
-          <Text
-            style={[
-              styles.metricHint,
-              { color: isDark ? "#71717a" : "#a1a1aa" },
-            ]}
-          >
-            Per recorded day
-          </Text>
+            <View style={styles.metricHeader}>
+              <Text
+                style={[
+                  styles.metricLabel,
+                  { color: isDark ? "#a1a1aa" : "#71717a" },
+                ]}
+                numberOfLines={1}
+              >
+                {selectedMonthStr === currentMonthStr ? "Projected End" : "Total Spent"}
+              </Text>
+              <View
+                style={[
+                  styles.metricIcon,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(88, 28, 135, 0.4)"
+                      : "#faf5ff",
+                  },
+                ]}
+              >
+                <Target
+                  size={15}
+                  color={isDark ? "#c084fc" : "#9333ea"}
+                />
+              </View>
+            </View>
+            <Text
+              style={[
+                styles.metricVal,
+                { color: isDark ? "#f4f4f5" : "#18181b" },
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {currency}
+              {(selectedMonthStr === currentMonthStr
+                ? metrics.projectedEnd
+                : metrics.totalSpent
+              ).toLocaleString()}
+            </Text>
+            <Text
+              style={[
+                styles.metricHint,
+                { color: isDark ? "#71717a" : "#a1a1aa" },
+              ]}
+              numberOfLines={1}
+            >
+              {selectedMonthStr === currentMonthStr ? "Estimated total" : "Monthly total"}
+            </Text>
+          </View>
         </View>
 
-        {/* Projected End */}
-        <View
-          style={[
-            styles.metricCard,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
-          <View style={styles.metricHeader}>
+        {/* Row 2: Best Day & Worst Day */}
+        <View style={styles.metricsRow}>
+          {/* Best Day */}
+          <View
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+              },
+            ]}
+          >
+            <View style={styles.metricHeader}>
+              <Text
+                style={[
+                  styles.metricLabel,
+                  { color: isDark ? "#a1a1aa" : "#71717a" },
+                ]}
+                numberOfLines={1}
+              >
+                Best Day (Saved)
+              </Text>
+              <View
+                style={[
+                  styles.metricIcon,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(5, 46, 22, 0.5)"
+                      : "#e8f6ed",
+                  },
+                ]}
+              >
+                <Sparkles
+                  size={15}
+                  color={isDark ? "#34d399" : "#15803d"}
+                />
+              </View>
+            </View>
             <Text
               style={[
-                styles.metricLabel,
-                { color: isDark ? "#a1a1aa" : "#71717a" },
+                styles.metricVal,
+                { color: isDark ? "#34d399" : "#15803d" },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
-              {selectedMonthStr === currentMonthStr ? "Projected End" : "Total Spent"}
+              {metrics.bestDay.date === "-" ? "-" : `+${currency}${metrics.bestDay.amount}`}
             </Text>
-            <View
+            <Text
               style={[
-                styles.metricIcon,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(88, 28, 135, 0.4)"
-                    : "#faf5ff",
-                },
+                styles.metricHint,
+                { color: isDark ? "#71717a" : "#a1a1aa" },
               ]}
+              numberOfLines={1}
             >
-              <Target
-                size={16}
-                color={isDark ? "#c084fc" : "#9333ea"}
-              />
-            </View>
+              {metrics.bestDay.date}
+            </Text>
           </View>
-          <Text
-            style={[
-              styles.metricVal,
-              { color: isDark ? "#f4f4f5" : "#18181b" },
-            ]}
-          >
-            {currency}
-            {(selectedMonthStr === currentMonthStr
-              ? metrics.projectedEnd
-              : metrics.totalSpent
-            ).toLocaleString()}
-          </Text>
-          <Text
-            style={[
-              styles.metricHint,
-              { color: isDark ? "#71717a" : "#a1a1aa" },
-            ]}
-          >
-            {selectedMonthStr === currentMonthStr ? "Estimated total" : "Monthly total"}
-          </Text>
-        </View>
 
-        {/* Best Day */}
-        <View
-          style={[
-            styles.metricCard,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
-          <View style={styles.metricHeader}>
+          {/* Worst Day */}
+          <View
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: isDark ? "#18181b" : "#ffffff",
+                borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
+              },
+            ]}
+          >
+            <View style={styles.metricHeader}>
+              <Text
+                style={[
+                  styles.metricLabel,
+                  { color: isDark ? "#a1a1aa" : "#71717a" },
+                ]}
+                numberOfLines={1}
+              >
+                Worst Day
+              </Text>
+              <View
+                style={[
+                  styles.metricIcon,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(76, 5, 25, 0.5)"
+                      : "#fdeeee",
+                  },
+                ]}
+              >
+                <TrendingDown
+                  size={15}
+                  color={isDark ? "#fb7185" : "#e11d48"}
+                />
+              </View>
+            </View>
             <Text
               style={[
-                styles.metricLabel,
-                { color: isDark ? "#a1a1aa" : "#71717a" },
+                styles.metricVal,
+                { color: isDark ? "#fb7185" : "#e11d48" },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
-              Best Day (Saved)
+              {metrics.worstDay.date === "-"
+                ? "-"
+                : metrics.worstDay.amount < 0
+                ? `-${currency}${Math.abs(metrics.worstDay.amount)}`
+                : `+${currency}${metrics.worstDay.amount}`}
             </Text>
-            <View
-              style={[
-                styles.metricIcon,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(5, 46, 22, 0.5)"
-                    : "#e8f6ed",
-                },
-              ]}
-            >
-              <Sparkles
-                size={16}
-                color={isDark ? "#34d399" : "#15803d"}
-              />
-            </View>
-          </View>
-          <Text
-            style={[
-              styles.metricVal,
-              { color: isDark ? "#34d399" : "#15803d" },
-            ]}
-          >
-            {metrics.bestDay.date === "-" ? "-" : `+${currency}${metrics.bestDay.amount}`}
-          </Text>
-          <Text
-            style={[
-              styles.metricHint,
-              { color: isDark ? "#71717a" : "#a1a1aa" },
-            ]}
-          >
-            {metrics.bestDay.date}
-          </Text>
-        </View>
-
-        {/* Worst Day */}
-        <View
-          style={[
-            styles.metricCard,
-            {
-              backgroundColor: isDark ? "#18181b" : "#ffffff",
-              borderColor: isDark ? "rgba(39, 39, 42, 0.8)" : "#e8e4db",
-            },
-          ]}
-        >
-          <View style={styles.metricHeader}>
             <Text
               style={[
-                styles.metricLabel,
-                { color: isDark ? "#a1a1aa" : "#71717a" },
+                styles.metricHint,
+                { color: isDark ? "#71717a" : "#a1a1aa" },
               ]}
+              numberOfLines={1}
             >
-              Worst Day
+              {metrics.worstDay.date}
             </Text>
-            <View
-              style={[
-                styles.metricIcon,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(76, 5, 25, 0.5)"
-                    : "#fdeeee",
-                },
-              ]}
-            >
-              <TrendingDown
-                size={16}
-                color={isDark ? "#fb7185" : "#e11d48"}
-              />
-            </View>
           </View>
-          <Text
-            style={[
-              styles.metricVal,
-              { color: isDark ? "#fb7185" : "#e11d48" },
-            ]}
-          >
-            {metrics.worstDay.date === "-"
-              ? "-"
-              : metrics.worstDay.amount < 0
-              ? `-${currency}${Math.abs(metrics.worstDay.amount)}`
-              : `+${currency}${metrics.worstDay.amount}`}
-          </Text>
-          <Text
-            style={[
-              styles.metricHint,
-              { color: isDark ? "#71717a" : "#a1a1aa" },
-            ]}
-          >
-            {metrics.worstDay.date}
-          </Text>
         </View>
       </View>
 
@@ -530,7 +552,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: Platform.OS === "ios" ? 54 : 36,
     paddingBottom: 110,
   },
@@ -553,36 +575,41 @@ const styles = StyleSheet.create({
   monthNavRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   navBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   monthLabel: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 15,
+    fontSize: 14,
+    marginHorizontal: 2,
   },
   metricsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
+    gap: 10,
     marginBottom: 20,
   },
+  metricsRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+  },
   metricCard: {
-    width: "48.2%",
-    borderRadius: 18,
+    flex: 1,
+    borderRadius: 16,
     borderWidth: 1,
-    padding: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    justifyContent: "space-between",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     elevation: 2,
   },
   metricHeader: {

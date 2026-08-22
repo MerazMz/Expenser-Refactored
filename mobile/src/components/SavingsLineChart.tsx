@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Dimensions, Animated, Easing } from "react-native";
+import { View, Text, StyleSheet, useWindowDimensions, Animated, Easing } from "react-native";
 import Svg, {
   Path,
   Defs,
@@ -15,7 +15,6 @@ import { format } from "date-fns";
 import { useAppTheme } from "../theme/ThemeContext";
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-const screenWidth = Dimensions.get("window").width;
 
 interface SavingsLineChartProps {
   data: {
@@ -32,11 +31,12 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
   accentColor = "#10b981",
 }) => {
   const { colors, isDark } = useAppTheme();
+  const { width: windowWidth } = useWindowDimensions();
 
-  const chartWidth = Math.min(screenWidth - 36, 420);
+  const chartWidth = Math.max(280, Math.min(windowWidth - 32, 420));
   const chartHeight = 220;
-  const paddingLeft = 40;
-  const paddingRight = 20;
+  const paddingLeft = 38;
+  const paddingRight = 16;
   const paddingTop = 32;
   const paddingBottom = 34;
 
@@ -242,12 +242,12 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
             <G
               x={Math.max(
                 paddingLeft,
-                Math.min(chartWidth - paddingRight - 54, maxPoint.x - 27)
+                Math.min(chartWidth - paddingRight - 62, maxPoint.x - 31)
               )}
               y={Math.max(6, maxPoint.y - 28)}
             >
               <Rect
-                width="54"
+                width="62"
                 height="22"
                 rx="11"
                 fill={isDark ? "#1c1e26" : "#ffffff"}
@@ -255,11 +255,11 @@ export const SavingsLineChart: React.FC<SavingsLineChartProps> = ({
                 strokeWidth="1.2"
               />
               <SvgText
-                x="27"
-                y="15"
+                x="31"
+                y="15.5"
                 textAnchor="middle"
                 fill={isDark ? "#f4f4f5" : "#111827"}
-                fontSize="10.5"
+                fontSize="11"
                 fontFamily="Outfit_700Bold"
               >
                 {currency}{maxPoint.saved}
