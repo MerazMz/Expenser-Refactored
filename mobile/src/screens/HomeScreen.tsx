@@ -150,7 +150,6 @@ export const HomeScreen: React.FC = () => {
   useEffect(() => {
     loadDashboardData();
     if (user?.uid) {
-      pullLatestDataFromServer(user.uid);
       syncDailyReminderStatus(user.uid, user.displayName || user.email);
     }
 
@@ -161,28 +160,16 @@ export const HomeScreen: React.FC = () => {
     // Listen for notification taps to open Add Expense modal immediately
     const unsubscribeNotification = addExpenseNotificationListener(() => {
       goToTab("Home");
-      setModalSpentInput(todayExpense.spent > 0 ? todayExpense.spent.toString() : "");
-      setModalNoteInput(todayExpense.note || "");
+      setModalSpentInput("");
+      setModalNoteInput("");
       setIsAddExpenseModalOpen(true);
-    });
-
-    // Re-verify data and resume state when app returns from background after hours
-    const appStateSub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") {
-        loadDashboardData();
-        if (user?.uid) {
-          pullLatestDataFromServer(user.uid);
-          syncDailyReminderStatus(user.uid, user.displayName || user.email);
-        }
-      }
     });
 
     return () => {
       unsubscribeSync();
       unsubscribeNotification();
-      appStateSub.remove();
     };
-  }, [user?.uid, user?.displayName, user?.email, todayExpense.spent, todayExpense.note, loadDashboardData, goToTab]);
+  }, [user?.uid, user?.displayName, user?.email, loadDashboardData, goToTab]);
 
   // Screen focus reload (loads from SQLite cache instantly with 0ms delay)
   useFocusEffect(

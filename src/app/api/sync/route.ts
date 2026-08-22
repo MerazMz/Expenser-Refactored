@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { format } from "date-fns";
+import { logSyncEvent, getLatestSyncCursor } from "@/lib/syncEvents";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     const accountId = searchParams.get("accountId");
+    const cursorParam = searchParams.get("cursor");
+    const cursor = cursorParam ? parseInt(cursorParam, 10) : 0;
 
     if (!userId) {
       return NextResponse.json(
@@ -25,20 +28,45 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [settings, accounts, expenses, user] = await Promise.all([
+    // Incremental sync if cursor > 0
+    if (cursor > 0) {
+      const events = await prisma.syncEvent.findMany({
+        where: {
+          userId,
+          version: { gt: cursor },
+        },
+        orderBy: { version: "asc" },
+      });
+
+      const latestCursor = events.length > 0 ? events[events.length - 1].version : cursor;
+
+      return NextResponse.json(
+        {
+          success: true,
+          cursor: latestCursor,
+          changes: events,
+          isIncremental: true,
+        },
+        { headers: corsHeaders }
+      );
+    }
+
+    // Full snapshot sync when cursor is missing or 0
+    const [settings, accounts, expenses, user, latestCursor] = await Promise.all([
       prisma.settings.findUnique({ where: { userId } }),
       prisma.account.findMany({
-        where: { userId },
+        where: { userId, deletedAt: null },
         orderBy: { createdAt: "asc" },
       }),
       prisma.expense.findMany({
-        where: accountId ? { userId, accountId } : { userId },
+        where: accountId ? { userId, accountId, deletedAt: null } : { userId, deletedAt: null },
         orderBy: { date: "asc" },
       }),
       prisma.user.findUnique({
         where: { id: userId },
         select: { id: true, email: true, displayName: true, photoURL: true, createdAt: true },
       }),
+      getLatestSyncCursor(userId),
     ]);
 
     // Calculate streak strictly scoped to accountId if supplied
@@ -66,11 +94,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
+        cursor: latestCursor,
         user,
         settings: settings || null,
         accounts: accounts || [],
         expenses: expenses || [],
         streak,
+        isIncremental: false,
       },
       { headers: corsHeaders }
     );
@@ -95,7 +125,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "PULL_DATA") {
-      const { userId, accountId } = payload;
+      const { userId, accountId, cursor: rawCursor } = payload;
       if (!userId) {
         return NextResponse.json(
           { error: "Missing userId" },
@@ -103,20 +133,47 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const [settings, accounts, expenses, user] = await Promise.all([
+      const cursor = rawCursor ? Number(rawCursor) : 0;
+
+      // Incremental sync
+      if (cursor > 0) {
+        const events = await prisma.syncEvent.findMany({
+          where: {
+            userId,
+            version: { gt: cursor },
+          },
+          orderBy: { version: "asc" },
+        });
+
+        const latestCursor = events.length > 0 ? events[events.length - 1].version : cursor;
+
+        return NextResponse.json(
+          {
+            success: true,
+            cursor: latestCursor,
+            changes: events,
+            isIncremental: true,
+          },
+          { headers: corsHeaders }
+        );
+      }
+
+      // Full snapshot sync
+      const [settings, accounts, expenses, user, latestCursor] = await Promise.all([
         prisma.settings.findUnique({ where: { userId } }),
         prisma.account.findMany({
-          where: { userId },
+          where: { userId, deletedAt: null },
           orderBy: { createdAt: "asc" },
         }),
         prisma.expense.findMany({
-          where: accountId ? { userId, accountId } : { userId },
+          where: accountId ? { userId, accountId, deletedAt: null } : { userId, deletedAt: null },
           orderBy: { date: "asc" },
         }),
         prisma.user.findUnique({
           where: { id: userId },
           select: { id: true, email: true, displayName: true, photoURL: true, createdAt: true },
         }),
+        getLatestSyncCursor(userId),
       ]);
 
       const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -143,11 +200,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: true,
+          cursor: latestCursor,
           user,
           settings: settings || null,
           accounts: accounts || [],
           expenses: expenses || [],
           streak,
+          isIncremental: false,
         },
         { headers: corsHeaders }
       );
@@ -172,12 +231,14 @@ export async function POST(req: NextRequest) {
       const account = id
         ? await prisma.account.upsert({
             where: { id },
-            update: accountData,
+            update: { ...accountData, deletedAt: null },
             create: { id, ...accountData },
           })
         : await prisma.account.create({
             data: accountData,
           });
+
+      await logSyncEvent(userId, "account", account.id, "upsert", account);
 
       return NextResponse.json({ success: true, account }, { headers: corsHeaders });
     }
@@ -213,6 +274,7 @@ export async function POST(req: NextRequest) {
           color: color !== undefined ? color : undefined,
           icon: icon !== undefined ? icon : undefined,
           isDefault: isDefault !== undefined ? Boolean(isDefault) : undefined,
+          deletedAt: null,
         },
         create: {
           id,
@@ -221,14 +283,19 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      await logSyncEvent(userId, "account", account.id, "upsert", account);
+
       return NextResponse.json({ success: true, account }, { headers: corsHeaders });
     }
 
     if (action === "DELETE_ACCOUNT") {
       const { id, userId } = payload;
-      await prisma.account.deleteMany({
+      await prisma.account.updateMany({
         where: { id, userId },
+        data: { deletedAt: new Date() },
       });
+
+      await logSyncEvent(userId, "account", id, "delete", { id, userId });
 
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }
@@ -248,9 +315,9 @@ export async function POST(req: NextRequest) {
         }
       }
       if (!validAccountId) {
-        let defAcc = await prisma.account.findFirst({ where: { userId, isDefault: true } });
+        let defAcc = await prisma.account.findFirst({ where: { userId, isDefault: true, deletedAt: null } });
         if (!defAcc) {
-          defAcc = await prisma.account.findFirst({ where: { userId } });
+          defAcc = await prisma.account.findFirst({ where: { userId, deletedAt: null } });
         }
         if (!defAcc) {
           defAcc = await prisma.account.create({
@@ -275,9 +342,11 @@ export async function POST(req: NextRequest) {
       // Strictly isolate by (userId, accountId, date)
       const expense = await prisma.expense.upsert({
         where: { userId_accountId_date: { userId, accountId: validAccountId, date } },
-        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit },
+        update: { spent: numSpent, saved, note: note || "", limit: dailyLimit, deletedAt: null },
         create: { userId, accountId: validAccountId, date, spent: numSpent, saved, note: note || "", limit: dailyLimit },
       });
+
+      await logSyncEvent(userId, "expense", expense.id, "upsert", expense);
 
       return NextResponse.json({ success: true, expense }, { headers: corsHeaders });
     }
@@ -308,6 +377,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      await logSyncEvent(userId, "settings", settings.id, "upsert", settings);
+
       return NextResponse.json({ success: true, settings }, { headers: corsHeaders });
     }
 
@@ -325,6 +396,8 @@ export async function POST(req: NextRequest) {
       await prisma.expense.deleteMany({
         where: whereClause,
       });
+
+      await logSyncEvent(userId, "expense", `${userId}_reset_${monthStr}`, "delete_month", { userId, accountId, monthStr });
 
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }

@@ -72,11 +72,7 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     refreshAccounts();
-    if (user?.uid) {
-      processOfflineSyncQueue();
-      pullLatestDataFromServer(user.uid);
-    }
-  }, [refreshAccounts, user?.uid]);
+  }, [refreshAccounts]);
 
   useEffect(() => {
     const unsub = subscribeSyncUpdates(() => {

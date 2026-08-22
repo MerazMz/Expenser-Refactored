@@ -25,6 +25,7 @@ model User {
   settings        Settings?
   accounts        Account[]
   expenses        Expense[]
+  syncEvents      SyncEvent[]
 
   @@map("users")
 }
@@ -42,6 +43,8 @@ model Account {
   color          String    @default("#10b981")
   icon           String    @default("wallet")
   isDefault      Boolean   @default(false)
+  version        Int       @default(1)
+  deletedAt      DateTime?
   expenses       Expense[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -51,37 +54,55 @@ model Account {
 }
 
 model Settings {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   monthlyBudget Float
   dailyBudget   Float
-  currency      String   @default("INR")
-  currentMonth  String   // Format: YYYY-MM
-  theme         String   @default("dark")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  currency      String    @default("INR")
+  currentMonth  String    // Format: YYYY-MM
+  theme         String    @default("dark")
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@map("settings")
 }
 
 model Expense {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accountId String
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  date      String   // Format: YYYY-MM-DD
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  date      String    // Format: YYYY-MM-DD
   limit     Float
-  spent     Float    @default(0)
-  saved     Float    @default(0)
-  note      String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  spent     Float     @default(0)
+  saved     Float     @default(0)
+  note      String    @default("")
+  version   Int       @default(1)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@unique([userId, accountId, date])
   @@index([userId, accountId, date])
   @@index([userId, accountId])
   @@index([userId])
   @@map("expenses")
+}
+
+model SyncEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version    Int      @default(autoincrement())
+  entityType String   // "expense" | "account" | "settings"
+  entityId   String
+  operation  String   // "create" | "update" | "delete"
+  data       Json
+  createdAt  DateTime @default(now())
+
+  @@index([userId, version])
+  @@map("sync_events")
 }

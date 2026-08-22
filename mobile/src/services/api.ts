@@ -11,6 +11,9 @@ export interface ApiResponse<T = any> {
   accounts?: any[];
   expenses?: any[];
   streak?: number;
+  cursor?: number;
+  changes?: any[];
+  isIncremental?: boolean;
 }
 
 export async function mobileLogin(email: string, password: string): Promise<ApiResponse> {
@@ -148,15 +151,16 @@ export async function mobileResetPassword(
   }
 }
 
-export async function pullServerUserData(userId: string): Promise<ApiResponse> {
+export async function pullServerUserData(userId: string, cursor?: number): Promise<ApiResponse> {
   try {
-    const res = await fetch(
-      `${API_BASE_URL}/api/sync?userId=${encodeURIComponent(userId)}`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    let url = `${API_BASE_URL}/api/sync?userId=${encodeURIComponent(userId)}`;
+    if (cursor !== undefined && cursor > 0) {
+      url += `&cursor=${cursor}`;
+    }
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
     const json = await res.json();
     if (!res.ok) {
       return { success: false, error: json.error || "Failed to fetch data" };

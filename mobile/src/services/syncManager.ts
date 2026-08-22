@@ -1,3 +1,4 @@
+import { AppState, AppStateStatus } from "react-native";
 import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
 import {
   getPendingSyncQueue,
@@ -8,15 +9,18 @@ import {
   bulkUpsertExpensesFromServer,
   bulkUpsertAccountsFromServer,
   upsertSettingsFromServer,
+  getLocalSyncCursor,
+  setLocalSyncCursor,
+  applyIncrementalSyncChanges,
 } from "../db/sqlite";
 import { syncMutationWithServer, pullServerUserData } from "./api";
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
-const LAST_SYNC_KEY = "@expenser_last_cloud_sync_timestamp";
-
 let isSyncingQueue = false;
 let isPullingData = false;
-let lastSyncTime = 0;
+let lastPullTime = 0;
+const MIN_PULL_INTERVAL_MS = 5000; // Minimum 5s between automatic pulls
+let currentUserId: string | null = null;
+let backgroundSyncTimer: NodeJS.Timeout | null = null;
 
 type SyncListener = () => void;
 const listeners: Set<SyncListener> = new Set();
@@ -39,20 +43,43 @@ export function notifySyncUpdates() {
 }
 
 /**
- * Pull latest data with smart caching.
- * If data was synced within CACHE_TTL_MS, skip API call unless force=true.
+ * Pull latest data from server using incremental cursor synchronization.
+ * If cursor exists, downloads only changed entities since that cursor.
+ * If cursor is 0 or forceFull is true, performs a full initial snapshot.
  */
 export async function pullLatestDataFromServer(
-  userId: string
+  userId: string,
+  forceFull: boolean = false
 ): Promise<boolean> {
   if (!userId) return false;
 
+  const now = Date.now();
+  if (!forceFull && now - lastPullTime < MIN_PULL_INTERVAL_MS) {
+    return true; // Cooldown active, skip redundant pull
+  }
+
   if (isPullingData) return true;
+
   isPullingData = true;
+  lastPullTime = now;
 
   try {
-    const res = await pullServerUserData(userId);
+    const cursor = forceFull ? 0 : await getLocalSyncCursor(userId);
+    const res = await pullServerUserData(userId, cursor);
+
     if (res && res.success) {
+      if (res.isIncremental && res.changes) {
+        if (res.changes.length > 0) {
+          await applyIncrementalSyncChanges(userId, res.changes);
+          notifySyncUpdates();
+        }
+        if (res.cursor) {
+          await setLocalSyncCursor(userId, res.cursor);
+        }
+        return true;
+      }
+
+      // Full snapshot
       if (res.accounts && Array.isArray(res.accounts)) {
         await bulkUpsertAccountsFromServer(userId, res.accounts);
       }
@@ -61,6 +88,9 @@ export async function pullLatestDataFromServer(
       }
       if (res.expenses && Array.isArray(res.expenses)) {
         await bulkUpsertExpensesFromServer(userId, res.expenses);
+      }
+      if (res.cursor) {
+        await setLocalSyncCursor(userId, res.cursor);
       }
 
       notifySyncUpdates();
@@ -76,6 +106,7 @@ export async function pullLatestDataFromServer(
 
 /**
  * Process all pending mutations in the local SQLite queue and upload them to production PostgreSQL.
+ * Safe and idempotent.
  */
 export async function processOfflineSyncQueue() {
   if (isSyncingQueue) return;
@@ -94,6 +125,8 @@ export async function processOfflineSyncQueue() {
         if (success) {
           anySuccess = true;
           if (item.action === "SAVE_EXPENSE") {
+            const actId = payload.accountId || `${payload.userId}_default`;
+            await markExpenseSynced(`${payload.userId}_${actId}_${payload.date}`);
             await markExpenseSynced(`${payload.userId}_${payload.date}`);
           } else if (item.action === "SAVE_SETTINGS") {
             await markSettingsSynced(payload.userId);
@@ -120,18 +153,52 @@ export async function processOfflineSyncQueue() {
   }
 }
 
+/**
+ * Initialize Event-Driven synchronization:
+ * 1. Immediate initial sync on app startup
+ * 2. Network reconnection trigger (offline -> online)
+ * 3. App foreground trigger (background -> active)
+ * 4. Gentle fallback heartbeat (every 45s) only while app is active
+ */
 export function initializeAutoSync(userId?: string) {
+  if (userId) {
+    currentUserId = userId;
+  }
+
+  // 1. Initial flush & incremental sync
+  processOfflineSyncQueue();
+  if (currentUserId) {
+    pullLatestDataFromServer(currentUserId);
+  }
+
+  // 2. Network reconnection listener
   NetInfo.addEventListener((state: NetInfoState) => {
-    if (state.isConnected) {
+    if (state.isConnected && state.isInternetReachable !== false) {
       processOfflineSyncQueue();
-      if (userId) {
-        pullLatestDataFromServer(userId);
+      if (currentUserId) {
+        pullLatestDataFromServer(currentUserId);
       }
     }
   });
 
-  processOfflineSyncQueue();
-  if (userId) {
-    pullLatestDataFromServer(userId);
+  // 3. AppState change listener (foreground resume)
+  AppState.addEventListener("change", (nextState: AppStateStatus) => {
+    if (nextState === "active") {
+      processOfflineSyncQueue();
+      if (currentUserId) {
+        pullLatestDataFromServer(currentUserId);
+      }
+    }
+  });
+
+  // 4. Gentle fallback background interval (every 45s, negligible payload with cursor)
+  if (backgroundSyncTimer) {
+    clearInterval(backgroundSyncTimer);
   }
+  backgroundSyncTimer = setInterval(() => {
+    if (currentUserId && AppState.currentState === "active") {
+      processOfflineSyncQueue();
+      pullLatestDataFromServer(currentUserId);
+    }
+  }, 45000);
 }

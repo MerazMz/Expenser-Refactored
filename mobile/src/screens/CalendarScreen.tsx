@@ -133,20 +133,10 @@ export const CalendarScreen: React.FC = () => {
       loadMonthData();
     });
 
-    const appStateSub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") {
-        loadMonthData();
-        if (user?.uid) {
-          pullLatestDataFromServer(user.uid);
-        }
-      }
-    });
-
     return () => {
       unsubscribe();
-      appStateSub.remove();
     };
-  }, [loadMonthData, user?.uid]);
+  }, [loadMonthData]);
 
   useFocusEffect(
     useCallback(() => {

@@ -129,6 +129,13 @@ async function initDatabase(db: SQLite.SQLiteDatabase) {
       "createdAt TEXT NOT NULL)"
   );
 
+  await db.execAsync(
+    "CREATE TABLE IF NOT EXISTS sync_metadata (" +
+      "key TEXT PRIMARY KEY, " +
+      "value TEXT NOT NULL, " +
+      "updatedAt TEXT NOT NULL)"
+  );
+
   // Migration: Ensure legacy unique indexes on (userId, date) are dropped
   try {
     await db.execAsync("DROP INDEX IF EXISTS idx_expenses_user_date");
@@ -595,6 +602,152 @@ export async function bulkUpsertExpensesFromServer(userId: string, serverExpense
         );
       }
     });
+  });
+}
+
+// ----------------------------------------------------
+// Incremental Sync Metadata & Change Application
+// ----------------------------------------------------
+
+export async function getLocalSyncCursor(userId: string): Promise<number> {
+  return await withSafeDb(async (db) => {
+    const res = await db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM sync_metadata WHERE key = ?",
+      [`${userId}_sync_cursor`]
+    );
+    return res ? parseInt(res.value, 10) || 0 : 0;
+  });
+}
+
+export async function setLocalSyncCursor(userId: string, cursor: number): Promise<void> {
+  return await withSafeDb(async (db) => {
+    const now = new Date().toISOString();
+    await db.runAsync(
+      `INSERT INTO sync_metadata (key, value, updatedAt)
+       VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt`,
+      [`${userId}_sync_cursor`, cursor.toString(), now]
+    );
+  });
+}
+
+export async function applyIncrementalSyncChanges(userId: string, changes: any[]): Promise<boolean> {
+  if (!changes || changes.length === 0) return false;
+  return await withSafeDb(async (db) => {
+    const now = new Date().toISOString();
+    await db.withTransactionAsync(async () => {
+      for (const change of changes) {
+        const { entityType, entityId, operation, data } = change;
+
+        if (entityType === "expense") {
+          if (operation === "delete") {
+            await db.runAsync("DELETE FROM expenses WHERE id = ? OR (userId = ? AND id LIKE ?)", [
+              entityId,
+              userId,
+              `%${entityId}%`,
+            ]);
+          } else if (operation === "delete_month") {
+            const { accountId, monthStr } = data || {};
+            if (accountId) {
+              await db.runAsync("DELETE FROM expenses WHERE userId = ? AND accountId = ? AND date LIKE ?", [
+                userId,
+                accountId,
+                `${monthStr}%`,
+              ]);
+            } else if (monthStr) {
+              await db.runAsync("DELETE FROM expenses WHERE userId = ? AND date LIKE ?", [
+                userId,
+                `${monthStr}%`,
+              ]);
+            }
+          } else if (operation === "upsert" || operation === "create" || operation === "update") {
+            const exp = data;
+            const actId = exp.accountId || `${userId}_default`;
+            const id = exp.id || `${userId}_${actId}_${exp.date}`;
+            const limit = Number(exp.limit ?? exp.limitAmount ?? 500);
+            const spent = Number(exp.spent ?? 0);
+            const saved = exp.saved !== undefined ? Number(exp.saved) : limit > 0 ? limit - spent : 0;
+            const note = exp.note || "";
+
+            await db.runAsync(
+              `INSERT INTO expenses (id, userId, accountId, date, limitAmount, spent, saved, note, synced, updatedAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 accountId = excluded.accountId,
+                 date = excluded.date,
+                 limitAmount = excluded.limitAmount,
+                 spent = excluded.spent,
+                 saved = excluded.saved,
+                 note = excluded.note,
+                 synced = 1,
+                 updatedAt = excluded.updatedAt`,
+              [id, userId, actId, exp.date, limit, spent, saved, note, exp.updatedAt || now]
+            );
+          }
+        } else if (entityType === "account") {
+          if (operation === "delete") {
+            await db.runAsync("DELETE FROM accounts WHERE id = ? AND userId = ?", [entityId, userId]);
+          } else if (operation === "upsert" || operation === "create" || operation === "update") {
+            const acc = data;
+            await db.runAsync(
+              `INSERT INTO accounts (id, userId, name, type, initialBalance, monthlyBudget, dailyBudget, currency, color, icon, isDefault, synced, createdAt, updatedAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 name = excluded.name,
+                 type = excluded.type,
+                 initialBalance = excluded.initialBalance,
+                 monthlyBudget = excluded.monthlyBudget,
+                 dailyBudget = excluded.dailyBudget,
+                 currency = excluded.currency,
+                 color = excluded.color,
+                 icon = excluded.icon,
+                 isDefault = excluded.isDefault,
+                 synced = 1,
+                 updatedAt = excluded.updatedAt`,
+              [
+                acc.id,
+                userId,
+                acc.name,
+                acc.type || "budget",
+                Number(acc.initialBalance) || 0,
+                Number(acc.monthlyBudget) || 0,
+                Number(acc.dailyBudget) || 0,
+                acc.currency || "INR",
+                acc.color || "#10b981",
+                acc.icon || "wallet",
+                acc.isDefault ? 1 : 0,
+                acc.createdAt || now,
+                acc.updatedAt || now,
+              ]
+            );
+          }
+        } else if (entityType === "settings") {
+          const set = data;
+          await db.runAsync(
+            `INSERT INTO settings (userId, monthlyBudget, dailyBudget, currency, theme, currentMonth, synced, updatedAt)
+             VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+             ON CONFLICT(userId) DO UPDATE SET
+               monthlyBudget = excluded.monthlyBudget,
+               dailyBudget = excluded.dailyBudget,
+               currency = excluded.currency,
+               theme = excluded.theme,
+               currentMonth = excluded.currentMonth,
+               synced = 1,
+               updatedAt = excluded.updatedAt`,
+            [
+              userId,
+              Number(set.monthlyBudget) || 0,
+              Number(set.dailyBudget) || 0,
+              set.currency || "INR",
+              set.theme || "dark",
+              set.currentMonth || "",
+              set.updatedAt || now,
+            ]
+          );
+        }
+      }
+    });
+    return true;
   });
 }
 

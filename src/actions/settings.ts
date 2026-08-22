@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { logSyncEvent } from "@/lib/syncEvents";
 
 async function resolveDefaultAccountId(userId: string): Promise<string> {
   let defAcc = await prisma.account.findFirst({ where: { userId, isDefault: true } });
@@ -67,6 +68,8 @@ export async function updateSettings(userId: string, data: {
 
   const accountId = await resolveDefaultAccountId(userId);
   await generateMonthEntries(userId, currentMonth, data.dailyBudget, accountId);
+
+  await logSyncEvent(userId, "settings", updatedSettings.id, "upsert", updatedSettings);
 
   revalidatePath("/");
   return updatedSettings;

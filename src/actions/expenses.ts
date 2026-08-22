@@ -3,6 +3,7 @@
 import prisma from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { format } from "date-fns";
+import { logSyncEvent } from "@/lib/syncEvents";
 
 async function resolveAccountId(userId: string, accountId?: string): Promise<string> {
   if (accountId) {
@@ -92,7 +93,7 @@ export async function saveExpense(userId: string, date: string, spent: number, n
 
   const expense = await prisma.expense.upsert({
     where: { userId_accountId_date: { userId, accountId: actId, date } },
-    update: { spent, saved, note: note || '' },
+    update: { spent, saved, note: note || '', deletedAt: null },
     create: {
       userId,
       accountId: actId,
@@ -103,6 +104,8 @@ export async function saveExpense(userId: string, date: string, spent: number, n
       note: note || '',
     },
   });
+
+  await logSyncEvent(userId, "expense", expense.id, "upsert", expense);
 
   revalidatePath("/");
   revalidatePath("/calendar");
